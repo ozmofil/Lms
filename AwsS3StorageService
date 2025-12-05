@@ -1,1 +1,61 @@
 
+using Amazon;
+using Amazon.S3;
+using Amazon.S3.Model;
+using Amazon.Runtime;
+using LmsPoc.Web.Application.Interfaces;
+using Microsoft.Extensions.Configuration;
+using Business.Services; // WalletConnector burada ise
+
+namespace LmsPoc.Web.Infrastructure.Storage
+{
+    public class AwsS3StorageService : IStorageService
+    {
+        private readonly IAmazonS3 _s3Client;
+        private readonly string _bucketName;
+        private readonly string _rootPath;
+
+        public AwsS3StorageService(IConfiguration config)
+        {
+            // AAPM URL appsettings'te duruyor varsayımı
+            var aapmUrl = config["AAPM"];
+            if (string.IsNullOrEmpty(aapmUrl))
+                throw new ArgumentException("AAPM URL config'te tanımlı değil (AAPM).");
+
+            // Diğer projede yaptığın gibi kimlik bilgilerini al
+            var credentialsResult = WalletConnector
+                .GetAAPMCredentialsAsync(aapmUrl)
+                .GetAwaiter()
+                .GetResult();
+
+            if (credentialsResult == null || credentialsResult.Aws == null)
+                throw new Exception("AAPM servisinden AWS kimlik bilgileri alınamadı.");
+
+            _bucketName = credentialsResult.Aws.BucketName; // Eğer oradan geliyorsa
+            _rootPath   = "lms-poc-content";                 // İster burada sabitle
+
+            var region = RegionEndpoint.GetBySystemName(credentialsResult.Aws.Region);
+
+            var basicCredentials = new BasicAWSCredentials(
+                credentialsResult.Aws.AccessKey,
+                credentialsResult.Aws.SecretKey);
+
+            _s3Client = new AmazonS3Client(basicCredentials, region);
+        }
+
+        public Task<string> GetFileUrlAsync(string relativePath)
+        {
+            var key = $"{_rootPath}/{relativePath}".Replace("//", "/");
+
+            var request = new GetPreSignedUrlRequest
+            {
+                BucketName = _bucketName,
+                Key = key,
+                Expires = DateTime.UtcNow.AddMinutes(10)
+            };
+
+            var url = _s3Client.GetPreSignedURL(request);
+            return Task.FromResult(url);
+        }
+    }
+}
