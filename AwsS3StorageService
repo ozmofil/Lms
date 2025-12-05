@@ -1,1 +1,15 @@
 
+public async Task<string> GetFileUrlAsync(string relativePath)
+        {
+            // lms-poc-content/videos/demo.mp4
+            var key = $"{_rootPath}/{relativePath}".Replace("//", "/");
+
+            var request = new GetPreSignedUrlRequest
+            {
+                BucketName = _bucketName,
+                Key = key,
+                Expires = DateTime.UtcNow.AddMinutes(10)
+            };
+
+            return _s3Client.GetPreSignedURL(request);
+        }
