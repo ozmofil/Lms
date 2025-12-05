@@ -1,1 +1,95 @@
 
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using LmsPoc.Web.Application.Interfaces;
+using LmsPoc.Web.Domain.Entities;
+
+namespace LmsPoc.Web.Application.Services
+{
+    /// <summary>
+    /// İçerik metadata bilgisini S3 tabanlı URL'lerle dönen servis.
+    /// UI bu servisin sadece IContentMetadataService kısmını görür.
+    /// </summary>
+    public class S3ContentMetadataService : IContentMetadataService
+    {
+        private readonly IStorageService _storageService;
+
+        public S3ContentMetadataService(IStorageService storageService)
+        {
+            _storageService = storageService;
+        }
+
+        public IReadOnlyList<ContentItem> GetContentsByType(ContentType type)
+        {
+            // Şimdilik basit: tip bazlı filtre yerine, tek tek metotları kullanacağız.
+            // İstersen sonra doldururuz; POC için NotImplemented da bırakabilirsin.
+            throw new System.NotImplementedException();
+        }
+
+        public ContentItem? GetFirstContentByType(ContentType type)
+        {
+            // Yukarıdaki gibi; şimdilik boş bırakabiliriz.
+            throw new System.NotImplementedException();
+        }
+
+        /// <summary>
+        /// S3'teki MP4 içeriğinin URL'ini alıp ContentItem olarak döner.
+        /// </summary>
+        public async Task<ContentItem> GetMp4Async()
+        {
+            // S3 içindeki dosya yolu (bucket içi key)
+            var url = await _storageService.GetFileUrlAsync("videos/demo.mp4");
+
+            return new ContentItem
+            {
+                Id = "video1",
+                Title = "S3 Demo MP4 Eğitim",
+                Type = ContentType.Mp4,
+                Url = url,
+                Description = "S3 üzerinde saklanan örnek MP4 eğitim içeriği"
+            };
+        }
+
+        public async Task<ContentItem> GetPdfAsync()
+        {
+            var url = await _storageService.GetFileUrlAsync("pdfs/demo.pdf");
+
+            return new ContentItem
+            {
+                Id = "pdf1",
+                Title = "S3 Demo PDF Eğitim",
+                Type = ContentType.Pdf,
+                Url = url,
+                Description = "S3 üzerinde saklanan örnek PDF eğitim içeriği"
+            };
+        }
+
+        public async Task<ContentItem> GetScormAsync()
+        {
+            var url = await _storageService.GetFileUrlAsync("scorm/demo/index.html");
+
+            return new ContentItem
+            {
+                Id = "scorm1",
+                Title = "S3 Demo SCORM Eğitim",
+                Type = ContentType.Scorm,
+                Url = url,
+                Description = "S3 üzerinde saklanan örnek SCORM eğitim içeriği"
+            };
+        }
+
+        public async Task<ContentItem> GetXapiAsync()
+        {
+            var url = await _storageService.GetFileUrlAsync("xapi/index.html");
+
+            return new ContentItem
+            {
+                Id = "xapi1",
+                Title = "S3 Demo xAPI Eğitim",
+                Type = ContentType.Xapi,
+                Url = url,
+                Description = "S3 üzerinde saklanan örnek xAPI eğitim içeriği"
+            };
+        }
+    }
+}
