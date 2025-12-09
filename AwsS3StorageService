@@ -1,1 +1,20 @@
 
+<div class="tab-pane fade show active" id="mp4-tab" role="tabpanel" aria-labelledby="mp4-tab-link">
+    <h5>MP4 İçerik</h5>
+
+    <!-- MP4 Dosya Yükle -->
+    <form id="mp4-upload-form" class="mb-3">
+        <div class="d-flex align-items-center gap-2">
+            <input type="file" id="mp4-upload-file" accept="video/*" class="form-control form-control-sm" />
+            <button type="button" id="mp4-upload-btn" class="btn btn-sm btn-secondary">MP4 Yükle</button>
+            <small id="mp4-upload-status" class="text-muted"></small>
+        </div>
+    </form>
+
+    <video id="mp4-player" width="640" controls>
+        <source src="@Model.Mp4Content?.Url" type="video/mp4" />
+        Tarayıcınız video elementini desteklemiyor.
+    </video>
+
+    <!-- aşağıda zaten olan MP4 aksiyon formu, JSON preview, loglar... -->
+</div>
