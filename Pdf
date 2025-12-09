@@ -1,0 +1,247 @@
+// wwwroot/js/LmsPdf.js
+// PDF tabı için:
+// - PDF iframe'i yüklendiğinde "opened" statement oluşturur
+// - Kullanıcı scroll ettikçe progress (%) hesaplar ve belli aralıklarla loglar
+// - En alta inince "completed" statement gönderir
+// - JSON Preview ve Loglar alanlarını günceller
+
+(function () {
+
+    let config = {};
+    let pdfState = {
+        progress: 0,
+        atBottom: false
+    };
+
+    let scrollTimerId = null;
+
+    // ----------------- Yardımcı fonksiyonlar -----------------
+
+    // PDF içindeki scroll progress'ini % cinsinden hesapla
+    function calcScrollProgress(frame) {
+        try {
+            const doc = frame.contentWindow.document;
+            const scrollEl =
+                doc.scrollingElement || doc.documentElement || doc.body;
+
+            const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
+            if (maxScroll <= 0) return 0;
+
+            const scrollTop = scrollEl.scrollTop;
+            const p = Math.floor((scrollTop / maxScroll) * 100);
+
+            return Math.min(Math.max(p, 0), 100);
+        } catch (e) {
+            console.warn("PDF scroll bilgisi okunamadı (muhtemelen cross-origin):", e);
+            return null;
+        }
+    }
+
+    function buildResultObject() {
+        return {
+            progress: pdfState.progress,
+            atBottom: pdfState.atBottom
+        };
+    }
+
+    function buildStatementObject() {
+        const userId    = document.getElementById("pdf-userId")?.value || "";
+        const verb      = document.getElementById("pdf-verb")?.value || "";
+        const contentId = document.getElementById("pdf-contentId")?.value || "";
+        const context   = document.getElementById("pdf-context")?.value || "";
+
+        return {
+            actor: userId,
+            verb: verb,
+            object: contentId,
+            context: context,
+            result: buildResultObject(),
+            contentType: config.contentType,   // "Pdf"
+            timestamp: new Date().toISOString()
+        };
+    }
+
+    function updateJsonPreview() {
+        const preview = document.getElementById("pdf-json-preview");
+        if (!preview) return;
+
+        const statement = buildStatementObject();
+        preview.textContent = JSON.stringify(statement, null, 2);
+    }
+
+    // HTML injection'a karşı basit escape
+    function escapeHtml(text) {
+        if (!text) return "";
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+    }
+
+    // ----------------- API çağrıları -----------------
+
+    async function sendStatement() {
+        const statement = buildStatementObject();
+
+        const payload = {
+            userId: statement.actor,
+            verb: statement.verb,
+            contentType: config.contentType,
+            contentId: statement.object,
+            context: statement.context,
+            result: statement.result
+        };
+
+        const response = await fetch(config.apiBaseUrl + "/statement", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        const preview = document.getElementById("pdf-json-preview");
+        if (preview && data.statementJson) {
+            preview.textContent = data.statementJson;
+        }
+
+        await loadLogs();
+    }
+
+    async function loadLogs() {
+        const logsContainer = document.getElementById("pdf-logs");
+        if (!logsContainer) return;
+
+        const response = await fetch(config.apiBaseUrl + "/logs?contentType=Pdf");
+        const logs = await response.json();
+
+        if (!logs || !logs.length) {
+            logsContainer.innerHTML = "<p>Henüz log yok.</p>";
+            return;
+        }
+
+        let html = `<table class="table table-sm">
+            <thead><tr><th>Zaman</th><th>Statement JSON</th></tr></thead><tbody>`;
+
+        logs.forEach(l => {
+            html += `<tr>
+                <td>${new Date(l.createdAt).toLocaleString()}</td>
+                <td><pre class="mb-0 small">${escapeHtml(l.statementJson || "")}</pre></td>
+            </tr>`;
+        });
+
+        html += "</tbody></table>";
+        logsContainer.innerHTML = html;
+    }
+
+    // ----------------- Scroll takibi -----------------
+
+    function startScrollTimer(frame) {
+        if (scrollTimerId) return;
+
+        scrollTimerId = setInterval(() => {
+            const progress = calcScrollProgress(frame);
+            if (progress == null) {
+                // cross-origin ise ileride farklı strateji uygulayabiliriz
+                return;
+            }
+
+            pdfState.progress = progress;
+            pdfState.atBottom = progress >= 90;
+
+            // Scroll logları "progressed" olarak gitsin
+            const verbInput = document.getElementById("pdf-verb");
+            if (!pdfState.atBottom) {
+                verbInput.value = "progressed";
+            } else {
+                verbInput.value = "completed";
+            }
+
+            updateJsonPreview();
+            sendStatement();
+
+            // Tamamlandıysa timer'ı durdur
+            if (pdfState.atBottom) {
+                stopScrollTimer();
+            }
+
+        }, 3000); // 3 sn'de bir log
+    }
+
+    function stopScrollTimer() {
+        if (scrollTimerId) {
+            clearInterval(scrollTimerId);
+            scrollTimerId = null;
+        }
+    }
+
+    function wirePdfTracking() {
+        const frame = document.getElementById("pdf-frame");
+        if (!frame) return;
+
+        // PDF iframe yüklendiğinde
+        frame.addEventListener("load", () => {
+
+            // İlk log: opened
+            const verbInput = document.getElementById("pdf-verb");
+            verbInput.value = "opened";
+            pdfState.progress = 0;
+            pdfState.atBottom = false;
+
+            updateJsonPreview();
+            sendStatement();
+
+            // Kullanıcı scroll ettikçe progress'i güncellemek için
+            try {
+                const doc = frame.contentWindow.document;
+                const scrollEl =
+                    doc.scrollingElement || doc.documentElement || doc.body;
+
+                // Scroll event'inde sadece state'i güncelliyoruz,
+                // asıl statement gönderme işi timer ile (3 sn'de bir)
+                scrollEl.addEventListener("scroll", () => {
+                    const progress = calcScrollProgress(frame);
+                    if (progress == null) return;
+
+                    pdfState.progress = progress;
+                    pdfState.atBottom = progress >= 90;
+                    updateJsonPreview();
+                });
+
+                // Sürekli statement yollayan timer
+                startScrollTimer(frame);
+
+            } catch (e) {
+                console.warn("PDF scroll eventleri bağlanamadı (muhtemelen cross-origin):", e);
+            }
+        });
+    }
+
+    // ----------------- Public API -----------------
+
+    window.LmsPdf = {
+        /**
+         * config:
+         *  - apiBaseUrl: "/api/cmi5"
+         *  - contentType: "Pdf"
+         */
+        init: function (options) {
+            config = options || {};
+
+            wirePdfTracking();
+
+            // Manuel "Statement Gönder" butonu (test amaçlı)
+            const sendBtn = document.getElementById("pdf-send-btn");
+            if (sendBtn) {
+                sendBtn.addEventListener("click", function (e) {
+                    e.preventDefault();
+                    sendStatement();
+                });
+            }
+
+            // Sayfa ilk açıldığında logları getir
+            loadLogs();
+        }
+    };
+
+})();
