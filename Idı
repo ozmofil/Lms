@@ -1,0 +1,225 @@
+// wwwroot/js/LmsMp4.js
+// MP4 tabı için:
+// - Video eventlerini dinler (play, pause, ended)
+// - Her 5 saniyede bir ve tamamlandığında otomatik cmi5/xAPI benzeri statement üretir
+// - /api/cmi5/statement endpoint'ine gönderir
+// - JSON Preview ve Loglar bölümünü günceller
+
+(function () {
+
+    // 5 saniyede bir log atmak için timer id
+    let progressTimerId = null;
+
+    // ----------------- Yardımcı fonksiyonlar -----------------
+
+    // currentTime'i ISO-8601 duration formatına çevir (örn: PT120S)
+    function formatIsoDuration(seconds) {
+        return `PT${Math.floor(seconds)}S`;
+    }
+
+    // Video player'dan result objesini oluştur (duration, progress, completion)
+    function buildResultObject(player) {
+        if (!player || !player.duration || isNaN(player.duration)) return null;
+
+        const progress = Math.floor((player.currentTime / player.duration) * 100);
+
+        return {
+            duration: formatIsoDuration(player.currentTime),
+            progress: progress,
+            completion: progress >= 90 // %90 ve üzeri ise tamamlandı kabul et
+        };
+    }
+
+    // Form + video player'dan cmi5/xAPI statement objesini üret
+    function buildStatementObject(config, player) {
+        const userId    = document.getElementById("mp4-userId")?.value || "";
+        const verb      = document.getElementById("mp4-verb")?.value || "";
+        const contentId = document.getElementById("mp4-contentId")?.value || "";
+        const context   = document.getElementById("mp4-context")?.value || "";
+
+        const resultObj = buildResultObject(player);
+
+        return {
+            actor: userId,
+            verb: verb,
+            object: contentId,
+            context: context,
+            result: resultObj,
+            contentType: config.contentType,   // "Mp4"
+            timestamp: new Date().toISOString()
+        };
+    }
+
+    // JSON preview alanını güncelle
+    function updateJsonPreview(config, player) {
+        const statement = buildStatementObject(config, player);
+        const preview = document.getElementById("mp4-json-preview");
+        if (!preview) return;
+
+        preview.textContent = JSON.stringify(statement, null, 2);
+    }
+
+    // ----------------- API çağrıları -----------------
+
+    // Statement'i backend'e gönder
+    async function sendStatement(config, player) {
+        const statement = buildStatementObject(config, player);
+
+        const payload = {
+            userId: statement.actor,
+            verb: statement.verb,
+            contentType: config.contentType,
+            contentId: statement.object,
+            context: statement.context,
+            result: statement.result
+        };
+
+        const response = await fetch(config.apiBaseUrl + "/statement", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        // Backend'den dönen statementJson'u JSON preview'de göster
+        const preview = document.getElementById("mp4-json-preview");
+        if (preview && data.statementJson) {
+            preview.textContent = data.statementJson;
+        }
+
+        // Logları yenile
+        await loadLogs(config);
+    }
+
+    // Logları backend'den çek ve UI'da listele
+    async function loadLogs(config) {
+        const logsContainer = document.getElementById("mp4-logs");
+        if (!logsContainer) return;
+
+        const response = await fetch(config.apiBaseUrl + "/logs?contentType=Mp4");
+        const logs = await response.json();
+
+        if (!logs || !logs.length) {
+            logsContainer.innerHTML = "<p>Henüz log yok.</p>";
+            return;
+        }
+
+        let html = `<table class="table table-sm">
+            <thead><tr><th>Zaman</th><th>Statement JSON</th></tr></thead><tbody>`;
+
+        logs.forEach(l => {
+            html += `<tr>
+                <td>${new Date(l.createdAt).toLocaleString()}</td>
+                <td><pre class="mb-0 small">${escapeHtml(l.statementJson || "")}</pre></td>
+            </tr>`;
+        });
+
+        html += "</tbody></table>";
+        logsContainer.innerHTML = html;
+    }
+
+    // HTML injection'a karşı basit escape
+    function escapeHtml(text) {
+        if (!text) return "";
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+    }
+
+    // ----------------- Timer kontrolü -----------------
+
+    // Video oynarken her 5 saniyede bir statement gönder
+    function startProgressTimer(config, player, verbSelect) {
+        if (progressTimerId) return; // Zaten çalışıyorsa tekrar başlatma
+
+        progressTimerId = setInterval(() => {
+            // Video durduysa ekstra log istemiyoruz
+            if (player.paused || player.ended) return;
+
+            // Ara log'lar "progressed" verb'ü ile gitsin
+            verbSelect.value = "progressed";
+
+            updateJsonPreview(config, player);
+            sendStatement(config, player);
+        }, 5000); // 5 saniye
+    }
+
+    function stopProgressTimer() {
+        if (progressTimerId) {
+            clearInterval(progressTimerId);
+            progressTimerId = null;
+        }
+    }
+
+    // ----------------- Video event wire-up -----------------
+
+    function wireVideoTracking(config) {
+        const player = document.getElementById("mp4-player");
+        const verbSelect = document.getElementById("mp4-verb");
+
+        if (!player || !verbSelect) return;
+
+        // PLAY
+        player.addEventListener("play", () => {
+            // İlk log: played
+            verbSelect.value = "played";
+            updateJsonPreview(config, player);
+            sendStatement(config, player);
+
+            // Sonraki loglar: her 5 sn'de bir progressed
+            startProgressTimer(config, player, verbSelect);
+        });
+
+        // PAUSE
+        player.addEventListener("pause", () => {
+            stopProgressTimer();
+
+            verbSelect.value = "paused";
+            updateJsonPreview(config, player);
+            sendStatement(config, player);
+        });
+
+        // END (video bitti)
+        player.addEventListener("ended", () => {
+            stopProgressTimer();
+
+            verbSelect.value = "completed";
+            updateJsonPreview(config, player);
+            sendStatement(config, player);
+        });
+    }
+
+    // ----------------- Public API -----------------
+
+    window.LmsMp4 = {
+        /**
+         * config:
+         *  - apiBaseUrl: "/api/cmi5"
+         *  - contentType: "Mp4"
+         */
+        init: function (config) {
+            const player = document.getElementById("mp4-player");
+            if (!player) {
+                console.warn("mp4-player elementi bulunamadı");
+                return;
+            }
+
+            wireVideoTracking(config);
+
+            // "Statement Gönder" butonu hâlâ manuel test için kullanılabilir
+            const sendBtn = document.getElementById("mp4-send-btn");
+            if (sendBtn) {
+                sendBtn.addEventListener("click", function (e) {
+                    e.preventDefault();
+                    sendStatement(config, player);
+                });
+            }
+
+            // Sayfa ilk açıldığında JSON preview ve logları doldur
+            updateJsonPreview(config, player);
+            loadLogs(config);
+        }
+    };
+})();
