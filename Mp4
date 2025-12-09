@@ -1,0 +1,166 @@
+/**
+ * LmsMp4
+ * -----------------------------
+ * MP4 eğitimleri için:
+ * - Video eventleri (play, pause, ended, timeupdate)
+ * - cmi5/xAPI uyumlu statement üretimi
+ * - UI'da JSON gösterimi
+ */
+window.LmsMp4 = (function () {
+
+    let config = {};
+    let videoElement = null;
+
+    /**
+     * INIT
+     * Index.cshtml içinden çağrılır
+     */
+    function init(options) {
+        config = options;
+
+        videoElement = document.getElementById(config.videoElementId);
+
+        if (!videoElement) {
+            console.warn("MP4 video elementi bulunamadı:", config.videoElementId);
+            return;
+        }
+
+        bindVideoEvents();
+        bindSendStatementButton();
+    }
+
+    /**
+     * Video eventlerini bağla
+     */
+    function bindVideoEvents() {
+        videoElement.addEventListener("play", () => {
+            onVideoEvent("played");
+        });
+
+        videoElement.addEventListener("pause", () => {
+            onVideoEvent("paused");
+        });
+
+        videoElement.addEventListener("ended", () => {
+            onVideoEvent("completed", {
+                success: true,
+                completion: true,
+                duration: videoElement.duration
+            });
+        });
+    }
+
+    /**
+     * Video üzerinde bir aksiyon alındığında
+     * cmi5 / xAPI statement üret
+     */
+    function onVideoEvent(verb, extraResult) {
+        const statement = buildStatement(verb, extraResult);
+        renderStatement(statement);
+    }
+
+    /**
+     * cmi5 / xAPI uyumlu JSON üretir
+     */
+    function buildStatement(verb, extraResult) {
+        const now = new Date().toISOString();
+
+        return {
+            actor: {
+                account: {
+                    name: "demo-user",
+                    homePage: window.location.origin
+                }
+            },
+            verb: {
+                id: getVerbId(verb),
+                display: {
+                    "en-US": verb
+                }
+            },
+            object: {
+                id: window.location.origin + "/content/mp4",
+                definition: {
+                    name: {
+                        "en-US": "MP4 Training Video"
+                    },
+                    type: "http://adlnet.gov/expapi/activities/video"
+                }
+            },
+            result: extraResult
+                ? {
+                    success: extraResult.success ?? null,
+                    completion: extraResult.completion ?? null,
+                    duration: extraResult.duration
+                        ? `PT${Math.floor(extraResult.duration)}S`
+                        : null
+                }
+                : null,
+            context: {
+                contextActivities: {
+                    category: [{
+                        id: "https://w3id.org/xapi/cmi5/context/categories/cmi5"
+                    }]
+                }
+            },
+            timestamp: now,
+            contentType: config.contentType
+        };
+    }
+
+    /**
+     * Verb mapping (standart xAPI)
+     */
+    function getVerbId(verb) {
+        switch (verb) {
+            case "played":
+                return "https://w3id.org/xapi/video/verbs/played";
+            case "paused":
+                return "https://w3id.org/xapi/video/verbs/paused";
+            case "completed":
+                return "http://adlnet.gov/expapi/verbs/completed";
+            default:
+                return "http://adlnet.gov/expapi/verbs/experienced";
+        }
+    }
+
+    /**
+     * JSON'u UI'da göster
+     */
+    function renderStatement(statement) {
+        const textarea = document.getElementById("statement-json");
+        if (textarea) {
+            textarea.value = JSON.stringify(statement, null, 2);
+        }
+    }
+
+    /**
+     * Manuel "Statement Gönder" butonu
+     */
+    function bindSendStatementButton() {
+        const btn = document.getElementById("send-statement-btn");
+        if (!btn) return;
+
+        btn.addEventListener("click", async () => {
+            const textarea = document.getElementById("statement-json");
+            if (!textarea || !textarea.value) {
+                alert("Gönderilecek statement yok");
+                return;
+            }
+
+            await fetch(config.apiBaseUrl + "/statement", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: textarea.value
+            });
+
+            alert("Statement gönderildi");
+        });
+    }
+
+    return {
+        init
+    };
+})();
