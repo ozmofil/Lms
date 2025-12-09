@@ -1,0 +1,38 @@
+@section Scripts {
+    <script src="~/js/LmsMp4.js"></script>
+    <script src="~/js/LmsPdf.js"></script>
+    <script src="~/js/LmsScorm.js"></script>
+    <script src="~/js/LmsXapi.js"></script>
+    <script src="~/js/LmsContentUpload.js"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+
+            // MP4 init
+            LmsMp4.init({
+                apiBaseUrl: "/api/cmi5",
+                contentType: "Mp4",
+                videoElementId: "mp4-player"
+            });
+
+            // Diğer tabların init'leri (şimdilik sade bırakabiliriz)
+            LmsPdf.init({
+                apiBaseUrl: "/api/cmi5",
+                contentType: "Pdf"
+            });
+
+            LmsScorm.init({
+                apiBaseUrl: "/api/cmi5",
+                contentType: "Scorm"
+            });
+
+            LmsXapi.init({
+                apiBaseUrl: "/api/cmi5",
+                contentType: "Xapi"
+            });
+
+            // ⬇️ En kritik satır: Upload eventlerini burada aktive ediyoruz
+            LmsUpload.init();
+        });
+    </script>
+}
