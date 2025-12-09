@@ -1,0 +1,136 @@
+// wwwroot/js/LmsContentUpload.js
+// Tüm tablar (MP4, PDF, SCORM, xAPI) için ortak dosya yükleme işlemlerini yönetir.
+
+(function () {
+
+    /**
+     * Tek bir tab için upload butonunu ve input'u bağlar.
+     * @param {string} fileInputId  - <input type="file"> elementinin id'si
+     * @param {string} buttonId     - "Yükle" butonunun id'si
+     * @param {string} statusId     - Durum yazısı için <small> elementinin id'si
+     * @param {string} contentType  - "mp4", "pdf", "scorm", "xapi"
+     * @param {function} onUploaded - Yükleme başarılı olduğunda UI'ı güncelleyen callback
+     */
+    function setupUpload(fileInputId, buttonId, statusId, contentType, onUploaded) {
+
+        const fileInput = document.getElementById(fileInputId);
+        const button = document.getElementById(buttonId);
+        const status = document.getElementById(statusId);
+
+        // Eğer ilgili tab henüz DOM'da yoksa, sessizce çık.
+        if (!fileInput || !button) {
+            console.log("[LmsUpload] Eleman bulunamadı:", fileInputId, buttonId);
+            return;
+        }
+
+        console.log("[LmsUpload] Upload butonu bağlandı:", buttonId);
+
+        button.addEventListener("click", async function (e) {
+            e.preventDefault(); // Form submit olmasın, sayfa yenilenmesin.
+
+            console.log("[LmsUpload] Click geldi:", buttonId);
+
+            if (!fileInput.files || fileInput.files.length === 0) {
+                if (status) status.textContent = "Lütfen bir dosya seçin.";
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("contentType", contentType);
+
+            if (status) status.textContent = "Yükleniyor...";
+
+            try {
+                const response = await fetch("/api/storage/upload", {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error("Sunucu hatası: " + response.status);
+                }
+
+                const data = await response.json();
+
+                if (status) status.textContent = "Yükleme tamamlandı.";
+
+                if (typeof onUploaded === "function") {
+                    onUploaded(data);
+                }
+            } catch (err) {
+                console.error("[LmsUpload] Hata:", err);
+                if (status) status.textContent = "Hata: " + err.message;
+            }
+        });
+    }
+
+    window.LmsUpload = {
+        /**
+         * Sayfa yüklendikten sonra bir kez çağrılır.
+         * Tüm tablardaki upload alanlarını aktive eder.
+         */
+        init: function () {
+
+            // MP4
+            setupUpload(
+                "mp4-upload-file",
+                "mp4-upload-btn",
+                "mp4-upload-status",
+                "mp4",
+                function (data) {
+                    // S3 yüklemesi sonrası video kaynağını yeni URL ile güncelle
+                    const player = document.getElementById("mp4-player");
+                    if (player) {
+                        player.src = data.url;
+                        player.load();
+                    }
+                }
+            );
+
+            // PDF
+            setupUpload(
+                "pdf-upload-file",
+                "pdf-upload-btn",
+                "pdf-upload-status",
+                "pdf",
+                function (data) {
+                    const frame = document.getElementById("pdf-frame");
+                    if (frame) {
+                        frame.src = data.url;
+                    }
+                }
+            );
+
+            // SCORM
+            setupUpload(
+                "scorm-upload-file",
+                "scorm-upload-btn",
+                "scorm-upload-status",
+                "scorm",
+                function (data) {
+                    const frame = document.getElementById("scorm-frame");
+                    if (frame) {
+                        frame.src = data.url;
+                    }
+                }
+            );
+
+            // xAPI
+            setupUpload(
+                "xapi-upload-file",
+                "xapi-upload-btn",
+                "xapi-upload-status",
+                "xapi",
+                function (data) {
+                    const frame = document.getElementById("xapi-frame");
+                    if (frame) {
+                        frame.src = data.url;
+                    }
+                }
+            );
+        }
+    };
+
+})();
