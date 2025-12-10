@@ -1,29 +1,20 @@
-using System.IO;
-using System.Threading.Tasks;
-
-namespace LmsPoc.Application.Interfaces
+namespace LmsPoc.Web.Application.Interfaces
 {
-    /// <summary>
-    /// Uygulamanın dosya saklama ile ilgili ihtiyaçlarını temsil eden
-    /// soyut servis. AWS S3, Azure Blob vb. somut implementasyonlar
-    /// Infrastructure katmanında olacak.
-    /// </summary>
+    public class StorageItem
+    {
+        public string Key { get; set; } = default!;
+        public string Url { get; set; } = default!;
+        public string ContentType { get; set; } = default!;
+    }
+
     public interface IStorageService
     {
-        /// <summary>
-        /// Verilen içeriği storage'a yükler ve erişim URL'ini döner.
-        /// </summary>
-        Task<string> UploadAsync(string key, Stream content, string contentType);
+        // ... senin var olan metodların (Upload, GetFileAsync vs) ...
 
         /// <summary>
-        /// Verilen key için public (veya pre-signed) URL üretir.
-        /// Sadece URL gerekiyorsa bu metod kullanılır.
+        /// Verilen prefix altındaki dosyaları listeler.
+        /// Örn: "lms-poc-content/scorm/"
         /// </summary>
-        Task<string> GetFileUrlAsync(string key);
-
-        /// <summary>
-        /// Verilen key'e ait dosyayı storage'tan siler.
-        /// </summary>
-        Task DeleteFileAsync(string key);
+        Task<IReadOnlyList<StorageItem>> ListAsync(string prefix);
     }
 }
