@@ -1,92 +1,60 @@
 @section Scripts {
-    <!--
-        Ortak JS dosyaları
-        Sıra önemli değil ama okunabilirlik için mantıksal grupladık.
-    -->
+
+    <!-- LMS modülleri -->
     <script src="~/js/LmsMp4.js"></script>
     <script src="~/js/LmsPdf.js"></script>
     <script src="~/js/LmsScorm.js"></script>
     <script src="~/js/LmsXapi.js"></script>
     <script src="~/js/LmsContentUpload.js"></script>
 
+    <!-- SADECE ORKESTRASYON (init değil) -->
     <script>
-        // Sayfanın HTML’i tamamen yüklendikten sonra çalıştıracağımız
-        // global başlangıç noktası
         document.addEventListener("DOMContentLoaded", function () {
 
-            // ==============================
-            // 1) MP4 TABI (Video eğitim)
-            // ==============================
-            // - Video player eventlerini dinleyen, her 5 sn'de bir
-            //   ve completed olduğunda cmi5/xAPI benzeri statement üreten JS.
-            // - /api/cmi5 endpoint'ine POST atıp log tablosunu yeniliyor.
+            console.log("Index: DOMContentLoaded");
+
+            /* =========================================================
+             * 1) MP4 / PDF / xAPI – direkt init
+             * ========================================================= */
             if (window.LmsMp4) {
-                LmsMp4.init({
-                    apiBaseUrl: "/api/cmi5",
-                    contentType: "Mp4"
-                });
+                LmsMp4.init({ apiBaseUrl: "/api/cmi5", contentType: "mp4" });
             }
 
-            // ==============================
-            // 2) PDF TABI
-            // ==============================
-            // - PDF sayfa değişikliklerini dinleyip statement üreten JS.
-            // - Aynı cmi5 endpoint’ine gönderip logları güncelliyor.
             if (window.LmsPdf) {
-                LmsPdf.init({
-                    apiBaseUrl: "/api/cmi5",
-                    contentType: "Pdf"
-                });
+                LmsPdf.init({ apiBaseUrl: "/api/cmi5", contentType: "pdf" });
             }
 
-            // ==============================
-            // 3) XAPI TABI
-            // ==============================
-            // - Kullanıcının formdan girdiği actor/verb/object/context değerleriyle
-            //   xAPI benzeri bir statement oluşturup backend’e gönderiyor.
             if (window.LmsXapi) {
-                LmsXapi.init({
-                    apiBaseUrl: "/api/cmi5",
-                    contentType: "Xapi"
-                });
+                LmsXapi.init({ apiBaseUrl: "/api/cmi5", contentType: "xapi" });
             }
 
-            // ======================================
-            // 4) SCORM TABI (LAZY INIT MANTIĞI)
-            // ======================================
-            // Burada kritik nokta şu:
-            //  - SCORM tabındaki HTML elementleri (btn-start-scorm, scorm-iframe vs.)
-            //    sayfa ilk açıldığında DOM’da olsa da bazı senaryolarda
-            //    tab yapısı yüzünden bulunamayabiliyor.
-            //  - Bu yüzden SCORM tarafını, tab GERÇEKTEN açıldığında init ediyoruz.
-            //
-            // Bootstrap 5 tab event’i: shown.bs.tab
-            //   -> SCORM tab butonunu yakalayıp, o event’te LmsScorm.init çağırıyoruz.
-            const scormTabLink = document.querySelector(
+            /* =========================================================
+             * 2) SCORM → SADECE TAB AÇILINCA init
+             * ========================================================= */
+
+            const scormTabButton = document.querySelector(
                 '[data-bs-toggle="tab"][data-bs-target="#scorm-tab"]'
             );
 
-            if (window.LmsScorm && scormTabLink) {
-                console.log("Index: SCORM tab event'i bağlanıyor");
+            if (scormTabButton && window.LmsScorm) {
+                console.log("Index: SCORM tab button bulundu");
 
-                scormTabLink.addEventListener("shown.bs.tab", function () {
-                    console.log("Index: SCORM tab açıldı, LmsScorm.init çağrılıyor");
-                    // Şimdilik config yok; ileride apiBaseUrl vb. eklersen buraya geçebilirsin.
-                    LmsScorm.init();
+                scormTabButton.addEventListener("shown.bs.tab", function () {
+                    console.log("Index: SCORM tab açıldı → LmsScorm.init() çağrılıyor");
+
+                    LmsScorm.init({
+                        apiBaseUrl: "/api/cmi5",
+                        courseId: "scorm1"
+                    });
                 });
             }
 
-            // ======================================
-            // 5) İÇERİK YÖNETİMİ (UPLOAD TABI)
-            // ======================================
-            // - Kullanıcının seçtiği eğitim türüne göre (Mp4, Pdf, Scorm, Xapi)
-            //   ilgili dosyayı S3’e upload eden JS.
-            // - Upload sonrası istersen içerik listesini yenilemek için 
-            //   LmsContentUpload.js içinde ayrı bir fonksiyon çağrılabilir.
+            /* =========================================================
+             * 3) İçerik Yönetimi (Upload)
+             * ========================================================= */
             if (window.LmsUpload) {
                 LmsUpload.init();
             }
-
         });
     </script>
 }
