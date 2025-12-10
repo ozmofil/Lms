@@ -1,49 +1,46 @@
-using LmsPoc.Web.Application.Interfaces;
-using LmsPoc.Web.Domain.Entities; // ContentType enum için varsayıyorum
-
-[ApiController]
-[Route("api/[controller]")]
-public class StorageController : ControllerBase
+public async Task<IReadOnlyList<StorageItem>> ListAsync(string prefix)
 {
-    private readonly IStorageService _storageService;
-
-    public StorageController(IStorageService storageService)
+    var request = new ListObjectsV2Request
     {
-        _storageService = storageService;
-    }
+        BucketName = _bucketName,
+        Prefix     = prefix
+    };
 
-    // ... mevcut Upload action'ın burada ...
+    var response = await _s3Client.ListObjectsV2Async(request);
 
-    /// <summary>
-    /// Verilen eğitim türüne göre S3 üzerindeki içerikleri listeler.
-    /// Örn: /api/storage/list?contentType=Mp4
-    /// </summary>
-    [HttpGet("list")]
-    public async Task<IActionResult> List([FromQuery] string contentType)
+    var items = new List<StorageItem>();
+
+    foreach (var obj in response.S3Objects)
     {
-        if (!Enum.TryParse<ContentType>(contentType, true, out var type))
-            return BadRequest("Geçersiz contentType.");
+        // klasör görünümlü olanları atla (key "/" ile bitiyor olabilir)
+        if (obj.Key.EndsWith("/")) continue;
 
-        // Her tür için S3 prefix'i
-        var prefix = type switch
+        // Her obje için pre-signed URL üret
+        var urlRequest = new GetPreSignedUrlRequest
         {
-            ContentType.Mp4   => "lms-poc-content/videos/",
-            ContentType.Pdf   => "lms-poc-content/pdfs/",
-            ContentType.Scorm => "lms-poc-content/scorm/",
-            ContentType.Xapi  => "lms-poc-content/xapi/",
-            _ => "lms-poc-content/"
+            BucketName = _bucketName,
+            Key        = obj.Key,
+            Expires    = DateTime.UtcNow.AddMinutes(30)
         };
 
-        var items = await _storageService.ListAsync(prefix);
+        var url = _s3Client.GetPreSignedURL(urlRequest);
 
-        // Basit DTO
-        var result = items.Select(x => new
+        items.Add(new StorageItem
         {
-            x.Key,
-            x.Url,
-            x.ContentType
+            Key         = obj.Key,
+            Url         = url,
+            ContentType = DetectContentTypeFromKey(obj.Key) // basit helper
         });
-
-        return Ok(result);
     }
+
+    return items;
+}
+
+private string DetectContentTypeFromKey(string key)
+{
+    if (key.Contains("/videos/", StringComparison.OrdinalIgnoreCase)) return "Mp4";
+    if (key.Contains("/pdfs/", StringComparison.OrdinalIgnoreCase))   return "Pdf";
+    if (key.Contains("/scorm/", StringComparison.OrdinalIgnoreCase))  return "Scorm";
+    if (key.Contains("/xapi/", StringComparison.OrdinalIgnoreCase))   return "Xapi";
+    return "Unknown";
 }
