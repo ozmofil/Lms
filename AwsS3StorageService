@@ -1,20 +1,49 @@
+using LmsPoc.Web.Application.Interfaces;
+using LmsPoc.Web.Domain.Entities; // ContentType enum için varsayıyorum
 
-<div class="tab-pane fade show active" id="mp4-tab" role="tabpanel" aria-labelledby="mp4-tab-link">
-    <h5>MP4 İçerik</h5>
+[ApiController]
+[Route("api/[controller]")]
+public class StorageController : ControllerBase
+{
+    private readonly IStorageService _storageService;
 
-    <!-- MP4 Dosya Yükle -->
-    <form id="mp4-upload-form" class="mb-3">
-        <div class="d-flex align-items-center gap-2">
-            <input type="file" id="mp4-upload-file" accept="video/*" class="form-control form-control-sm" />
-            <button type="button" id="mp4-upload-btn" class="btn btn-sm btn-secondary">MP4 Yükle</button>
-            <small id="mp4-upload-status" class="text-muted"></small>
-        </div>
-    </form>
+    public StorageController(IStorageService storageService)
+    {
+        _storageService = storageService;
+    }
 
-    <video id="mp4-player" width="640" controls>
-        <source src="@Model.Mp4Content?.Url" type="video/mp4" />
-        Tarayıcınız video elementini desteklemiyor.
-    </video>
+    // ... mevcut Upload action'ın burada ...
 
-    <!-- aşağıda zaten olan MP4 aksiyon formu, JSON preview, loglar... -->
-</div>
+    /// <summary>
+    /// Verilen eğitim türüne göre S3 üzerindeki içerikleri listeler.
+    /// Örn: /api/storage/list?contentType=Mp4
+    /// </summary>
+    [HttpGet("list")]
+    public async Task<IActionResult> List([FromQuery] string contentType)
+    {
+        if (!Enum.TryParse<ContentType>(contentType, true, out var type))
+            return BadRequest("Geçersiz contentType.");
+
+        // Her tür için S3 prefix'i
+        var prefix = type switch
+        {
+            ContentType.Mp4   => "lms-poc-content/videos/",
+            ContentType.Pdf   => "lms-poc-content/pdfs/",
+            ContentType.Scorm => "lms-poc-content/scorm/",
+            ContentType.Xapi  => "lms-poc-content/xapi/",
+            _ => "lms-poc-content/"
+        };
+
+        var items = await _storageService.ListAsync(prefix);
+
+        // Basit DTO
+        var result = items.Select(x => new
+        {
+            x.Key,
+            x.Url,
+            x.ContentType
+        });
+
+        return Ok(result);
+    }
+}
