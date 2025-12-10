@@ -1,0 +1,123 @@
+// wwwroot/js/LmsContentUpload.js
+// "İçerik Yönetimi" tabında:
+// - Eğitim türüne göre dosya upload eder (/api/storage/upload)
+// - S3'ten içerik listesini çeker (/api/storage/list)
+// - Listeyi tabloda gösterir
+
+(function () {
+
+    async function uploadFile() {
+        const typeSelect = document.getElementById("admin-contentType");
+        const fileInput  = document.getElementById("admin-file");
+        const status     = document.getElementById("admin-upload-status");
+
+        if (!typeSelect || !fileInput) return;
+
+        const contentType = typeSelect.value;
+
+        if (!fileInput.files || fileInput.files.length === 0) {
+            status.textContent = "Lütfen bir dosya seçin.";
+            return;
+        }
+
+        const file = fileInput.files[0];
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("contentType", contentType);
+
+        status.textContent = "Yükleniyor...";
+
+        try {
+            const response = await fetch("/api/storage/upload", {
+                method: "POST",
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error("Sunucu hatası: " + response.status);
+            }
+
+            const data = await response.json();
+            status.textContent = "Yükleme tamamlandı.";
+
+            // Yükleme sonrası seçili türün listesini yenile
+            await loadList(contentType);
+
+        } catch (err) {
+            console.error(err);
+            status.textContent = "Hata: " + err.message;
+        }
+    }
+
+    async function loadList(contentType) {
+        const listContainer = document.getElementById("admin-content-list");
+        if (!listContainer) return;
+
+        listContainer.innerHTML = "Yükleniyor...";
+
+        try {
+            const response = await fetch(`/api/storage/list?contentType=${encodeURIComponent(contentType)}`);
+            if (!response.ok) {
+                throw new Error("Liste alınamadı: " + response.status);
+            }
+
+            const items = await response.json();
+
+            if (!items || items.length === 0) {
+                listContainer.innerHTML = "<p>Bu türde henüz içerik yok.</p>";
+                return;
+            }
+
+            let html = `<table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Key</th>
+                        <th>Önizleme / Link</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+            items.forEach(item => {
+                html += `<tr>
+                    <td class="small">${item.key}</td>
+                    <td>
+                        <a href="${item.url}" target="_blank">Aç</a>
+                    </td>
+                </tr>`;
+            });
+
+            html += "</tbody></table>";
+            listContainer.innerHTML = html;
+
+        } catch (err) {
+            console.error(err);
+            listContainer.innerHTML = `<p class="text-danger">Hata: ${err.message}</p>`;
+        }
+    }
+
+    window.LmsUpload = {
+        init: function () {
+            const typeSelect = document.getElementById("admin-contentType");
+            const uploadBtn  = document.getElementById("admin-upload-btn");
+
+            if (uploadBtn) {
+                uploadBtn.addEventListener("click", function (e) {
+                    e.preventDefault();
+                    uploadFile();
+                });
+            }
+
+            // Eğitim türü değiştikçe listeyi yenile
+            if (typeSelect) {
+                typeSelect.addEventListener("change", function () {
+                    loadList(typeSelect.value);
+                });
+
+                // Sayfa ilk açıldığında varsayılan tür için listeyi yükle
+                loadList(typeSelect.value);
+            }
+        }
+    };
+
+})();
