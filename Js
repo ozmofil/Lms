@@ -1,130 +1,122 @@
-// wwwroot/js/lmsContentUpload.js
-// Tüm tablar için ortak dosya yükleme işlemlerini yönetir.
+// wwwroot/js/LmsContentUpload.js
+// "İçerik Yönetimi" tabında:
+// - Eğitim türüne göre dosya upload eder (/api/storage/upload)
+// - S3'ten içerik listesini çeker (/api/storage/list)
+// - Listeyi tabloda gösterir
 
 (function () {
 
-    /**
-     * Tek bir tab için upload butonunu ve input'u bağlar.
-     * @param {string} fileInputId  - <input type="file"> elementinin id'si
-     * @param {string} buttonId     - "Yükle" butonunun id'si
-     * @param {string} statusId     - Durum yazısı için <small> elementinin id'si
-     * @param {string} contentType  - "mp4", "pdf", "scorm", "xapi"
-     * @param {function} onUploaded - Yükleme başarılı olduğunda UI'ı güncellemek için callback
-     */
-    function setupUpload(fileInputId, buttonId, statusId, contentType, onUploaded) {
+    async function uploadFile() {
+        const typeSelect = document.getElementById("admin-contentType");
+        const fileInput  = document.getElementById("admin-file");
+        const status     = document.getElementById("admin-upload-status");
 
-        const fileInput = document.getElementById(fileInputId);
-        const button = document.getElementById(buttonId);
-        const status = document.getElementById(statusId);
+        if (!typeSelect || !fileInput) return;
 
-        if (!fileInput || !button) {
-            // İlgili tab henüz render edilmediyse sessizce çık.
+        const contentType = typeSelect.value;
+
+        if (!fileInput.files || fileInput.files.length === 0) {
+            status.textContent = "Lütfen bir dosya seçin.";
             return;
         }
 
-        button.addEventListener("click", async function (e) {
-            e.preventDefault();
+        const file = fileInput.files[0];
 
-            if (!fileInput.files || fileInput.files.length === 0) {
-                if (status) status.textContent = "Lütfen bir dosya seçin.";
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("contentType", contentType);
+
+        status.textContent = "Yükleniyor...";
+
+        try {
+            const response = await fetch("/api/storage/upload", {
+                method: "POST",
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error("Sunucu hatası: " + response.status);
+            }
+
+            const data = await response.json();
+            status.textContent = "Yükleme tamamlandı.";
+
+            // Yükleme sonrası seçili türün listesini yenile
+            await loadList(contentType);
+
+        } catch (err) {
+            console.error(err);
+            status.textContent = "Hata: " + err.message;
+        }
+    }
+
+    async function loadList(contentType) {
+        const listContainer = document.getElementById("admin-content-list");
+        if (!listContainer) return;
+
+        listContainer.innerHTML = "Yükleniyor...";
+
+        try {
+            const response = await fetch(`/api/storage/list?contentType=${encodeURIComponent(contentType)}`);
+            if (!response.ok) {
+                throw new Error("Liste alınamadı: " + response.status);
+            }
+
+            const items = await response.json();
+
+            if (!items || items.length === 0) {
+                listContainer.innerHTML = "<p>Bu türde henüz içerik yok.</p>";
                 return;
             }
 
-            const file = fileInput.files[0];
-            const formData = new FormData();
-            formData.append("file", file);
-            formData.append("contentType", contentType);
+            let html = `<table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Key</th>
+                        <th>Önizleme / Link</th>
+                    </tr>
+                </thead>
+                <tbody>`;
 
-            if (status) status.textContent = "Yükleniyor...";
+            items.forEach(item => {
+                html += `<tr>
+                    <td class="small">${item.key}</td>
+                    <td>
+                        <a href="${item.url}" target="_blank">Aç</a>
+                    </td>
+                </tr>`;
+            });
 
-            try {
-                const response = await fetch("/api/storage/upload", {
-                    method: "POST",
-                    body: formData
-                });
+            html += "</tbody></table>";
+            listContainer.innerHTML = html;
 
-                if (!response.ok) {
-                    throw new Error("Sunucu hatası: " + response.status);
-                }
-
-                const data = await response.json();
-
-                if (status) status.textContent = "Yükleme tamamlandı.";
-
-                if (typeof onUploaded === "function") {
-                    onUploaded(data);
-                }
-
-            } catch (err) {
-                if (status) status.textContent = "Hata: " + err.message;
-            }
-        });
+        } catch (err) {
+            console.error(err);
+            listContainer.innerHTML = `<p class="text-danger">Hata: ${err.message}</p>`;
+        }
     }
 
     window.LmsUpload = {
-        /**
-         * Tüm tablar için upload handler'larını kurar.
-         * Sayfa yüklendikten sonra bir kez çağrılmalı.
-         */
         init: function () {
+            const typeSelect = document.getElementById("admin-contentType");
+            const uploadBtn  = document.getElementById("admin-upload-btn");
 
-            // MP4
-            setupUpload(
-                "mp4-upload-file",
-                "mp4-upload-btn",
-                "mp4-upload-status",
-                "mp4",
-                function (data) {
-                    // Upload sonrası player'ın kaynağını yeni URL ile güncelle
-                    const player = document.getElementById("mp4-player");
-                    if (player) {
-                        player.src = data.url;
-                        player.load();
-                    }
-                }
-            );
+            if (uploadBtn) {
+                uploadBtn.addEventListener("click", function (e) {
+                    e.preventDefault();
+                    uploadFile();
+                });
+            }
 
-            // PDF
-            setupUpload(
-                "pdf-upload-file",
-                "pdf-upload-btn",
-                "pdf-upload-status",
-                "pdf",
-                function (data) {
-                    const frame = document.getElementById("pdf-frame");
-                    if (frame) {
-                        frame.src = data.url;
-                    }
-                }
-            );
+            // Eğitim türü değiştikçe listeyi yenile
+            if (typeSelect) {
+                typeSelect.addEventListener("change", function () {
+                    loadList(typeSelect.value);
+                });
 
-            // SCORM
-            setupUpload(
-                "scorm-upload-file",
-                "scorm-upload-btn",
-                "scorm-upload-status",
-                "scorm",
-                function (data) {
-                    const frame = document.getElementById("scorm-frame");
-                    if (frame) {
-                        frame.src = data.url;
-                    }
-                }
-            );
-
-            // xAPI
-            setupUpload(
-                "xapi-upload-file",
-                "xapi-upload-btn",
-                "xapi-upload-status",
-                "xapi",
-                function (data) {
-                    const frame = document.getElementById("xapi-frame");
-                    if (frame) {
-                        frame.src = data.url;
-                    }
-                }
-            );
+                // Sayfa ilk açıldığında varsayılan tür için listeyi yükle
+                loadList(typeSelect.value);
+            }
         }
     };
 
