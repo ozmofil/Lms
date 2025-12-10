@@ -1,145 +1,181 @@
-// wwwroot/js/LmsContentUpload.js
-// "İçerik Yönetimi" tabında:
-// - Eğitim türüne göre dosya upload eder (/api/storage/upload)
-// - S3'ten içerik listesini çeker (/api/storage/list)
-// - Listeyi tabloda gösterir
-// Bu dosya sadece admin/upload işinden sorumlu.
+/*
+ * LmsScorm.js
+ * ---------------------------------------
+ * SCORM 1.2 launch + API mock + event capture
+ * ---------------------------------------
+ */
 
-(function () {
+var LmsScorm = (function () {
 
-    // Dışarıdan erişilecek tek nokta: LmsUpload.init()
+    let currentCourseId = null;
+    let iframeEl = null;
+
+    /* =========================
+       INIT
+    ========================= */
     function init() {
-        console.log("LmsUpload.init başladı.");
+        iframeEl = document.getElementById("scorm-frame");
 
-        const typeSelect    = document.getElementById("admin-contentType");
-        const fileInput     = document.getElementById("admin-file");
-        const uploadBtn     = document.getElementById("admin-upload-btn");
-        const statusLabel   = document.getElementById("admin-upload-status");
-        const listContainer = document.getElementById("admin-content-list");
-
-        // Güvenlik için element kontrolleri
-        if (!uploadBtn || !typeSelect || !fileInput || !statusLabel || !listContainer) {
-            console.warn("LmsUpload: admin upload elementlerinden biri bulunamadı.");
+        const loadBtn = document.getElementById("load-scorm-btn");
+        if (!iframeEl || !loadBtn) {
+            console.warn("SCORM UI elementleri bulunamadı");
             return;
         }
 
-        console.log("LmsUpload: admin upload elementleri bulundu.");
-
-        // ---- S3 listesini çeken fonksiyon ----
-        async function loadList() {
-            const contentType = typeSelect.value;
-            console.log("LmsUpload: liste yükleniyor, tür:", contentType);
-
-            listContainer.innerHTML = "Yükleniyor...";
-
-            try {
-                const response = await fetch(`/api/storage/list?contentType=${encodeURIComponent(contentType)}`);
-                if (!response.ok) {
-                    throw new Error("Liste alınamadı: " + response.status);
-                }
-
-                const items = await response.json();
-                console.log("LmsUpload: liste sonucu:", items);
-
-                if (!items || items.length === 0) {
-                    listContainer.innerHTML = "<p>Bu türde henüz içerik yok.</p>";
-                    return;
-                }
-
-                let html = `<table class="table table-sm">
-                    <thead>
-                        <tr>
-                            <th>Key</th>
-                            <th>Önizleme / Link</th>
-                        </tr>
-                    </thead>
-                    <tbody>`;
-
-                items.forEach(item => {
-                    html += `<tr>
-                        <td class="small">${item.key}</td>
-                        <td><a href="${item.url}" target="_blank">Aç</a></td>
-                    </tr>`;
-                });
-
-                html += "</tbody></table>";
-                listContainer.innerHTML = html;
-
-            } catch (err) {
-                console.error("LmsUpload: liste hatası", err);
-                listContainer.innerHTML = `<p class="text-danger">Hata: ${err.message}</p>`;
-            }
-        }
-
-        // ---- Dosya upload eden fonksiyon ----
-        async function uploadFile() {
-            const contentType = typeSelect.value;
-            const files = fileInput.files;
-
-            console.log("LmsUpload: upload tetiklendi.");
-
-            if (!files || files.length === 0) {
-                statusLabel.textContent = "Lütfen bir dosya seçin.";
-                return;
-            }
-
-            const file = files[0];
-
-            const formData = new FormData();
-            formData.append("file", file);
-            formData.append("contentType", contentType);
-
-            statusLabel.textContent = "Yükleniyor...";
-
-            try {
-                console.log("LmsUpload: upload isteği gönderiliyor:", contentType, file.name);
-
-                const response = await fetch("/api/storage/upload", {
-                    method: "POST",
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    throw new Error("Sunucu hatası: " + response.status);
-                }
-
-                const data = await response.json();
-                console.log("LmsUpload: upload tamamlandı:", data);
-
-                statusLabel.textContent = "Yükleme tamamlandı.";
-
-                // Yükleme sonrası listeyi yenile
-                await loadList();
-
-            } catch (err) {
-                console.error("LmsUpload: upload hatası", err);
-                statusLabel.textContent = "Hata: " + err.message;
-            }
-        }
-
-        // ---- Event bağlama ----
-
-        // Yükle butonu tıklanınca upload yap
-        uploadBtn.addEventListener("click", function (e) {
-            e.preventDefault();
-            console.log("LmsUpload: Yükle butonuna tıklandı.");
-            uploadFile();
+        loadBtn.addEventListener("click", () => {
+            currentCourseId = loadBtn.dataset.courseId || "course-123";
+            launchScorm(currentCourseId);
         });
 
-        // Eğitim türü değişince listeyi yenile
-        typeSelect.addEventListener("change", function () {
-            loadList();
-        });
-
-        // Sayfa ilk açıldığında varsayılan tür için listeyi getir
-        loadList();
-
-        console.log("LmsUpload.init bitti.");
+        exposeScormApi();
     }
 
-    // Global obje: sadece init fonksiyonu dışarı açılıyor
-    window.LmsUpload = {
-        init: init
-    };
+    /* =========================
+       SCORM LAUNCH
+    ========================= */
+    async function launchScorm(courseId) {
+        try {
+            console.log("SCORM launch:", courseId);
 
+            const res = await fetch(`/api/storage/scorm/launch?courseId=${courseId}`);
+            if (!res.ok) throw new Error("SCORM launch URL alınamadı");
+
+            const data = await res.json();
+            iframeEl.src = data.launchUrl;
+
+        } catch (err) {
+            console.error("SCORM başlatma hatası:", err);
+        }
+    }
+
+    /* =========================
+       SCORM API (SCORM 1.2)
+    ========================= */
+    function exposeScormApi() {
+
+        window.API = {
+            LMSInitialize,
+            LMSFinish,
+            LMSSetValue,
+            LMSGetValue,
+            LMSCommit,
+            LMSGetLastError,
+            LMSGetErrorString,
+            LMSGetDiagnostic
+        };
+
+        console.log("SCORM API hazır");
+    }
+
+    /* =========================
+       SCORM API FUNCTIONS
+    ========================= */
+
+    function LMSInitialize() {
+        logEvent("initialized");
+        return "true";
+    }
+
+    function LMSFinish() {
+        logEvent("terminated", {
+            completion: true
+        });
+        return "true";
+    }
+
+    function LMSSetValue(key, value) {
+        console.log("SCORM:SetValue", key, value);
+
+        const result = mapCmiToResult(key, value);
+        if (result) {
+            logEvent("progressed", result);
+        }
+
+        return "true";
+    }
+
+    function LMSGetValue(key) {
+        return "";
+    }
+
+    function LMSCommit() {
+        logEvent("committed");
+        return "true";
+    }
+
+    function LMSGetLastError() { return "0"; }
+    function LMSGetErrorString() { return ""; }
+    function LMSGetDiagnostic() { return ""; }
+
+    /* =========================
+       CMI → RESULT MAPPER
+    ========================= */
+    function mapCmiToResult(key, value) {
+        const result = {};
+
+        switch (key) {
+
+            case "cmi.core.lesson_status":
+                result.completion = (value === "completed" || value === "passed");
+                break;
+
+            case "cmi.core.score.raw":
+                result.score = Number(value);
+                break;
+
+            case "cmi.core.session_time":
+                result.duration = value;
+                break;
+
+            default:
+                return null;
+        }
+
+        return result;
+    }
+
+    /* =========================
+       LOGGING / JSON
+    ========================= */
+    function logEvent(verb, result = {}) {
+        const statement = buildStatement(verb, result);
+
+        console.log("SCORM Statement:", statement);
+
+        // JSON Preview alanı
+        const preview = document.getElementById("scorm-json-preview");
+        if (preview) {
+            preview.textContent = JSON.stringify(statement, null, 2);
+        }
+
+        // Log listesi (opsiyonel)
+        appendLog(statement);
+    }
+
+    function buildStatement(verb, result) {
+        return {
+            Actor: document.getElementById("scorm-userId")?.value || "demo-user",
+            Verb: verb,
+            Object: currentCourseId,
+            Context: document.getElementById("scorm-context")?.value || "",
+            Result: Object.keys(result).length ? result : null,
+            ContentType: "scorm",
+            Timestamp: new Date().toISOString()
+        };
+    }
+
+    function appendLog(statement) {
+        const logBody = document.getElementById("scorm-log-body");
+        if (!logBody) return;
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${new Date(statement.Timestamp).toLocaleTimeString()}</td>
+            <td><pre>${JSON.stringify(statement)}</pre></td>
+        `;
+        logBody.prepend(tr);
+    }
+
+    /* ========================= */
+    return { init };
 })();
