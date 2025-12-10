@@ -1,59 +1,92 @@
-<!-- ======= SCORM TAB ======= -->
-<div class="tab-pane fade" id="scorm-tab" role="tabpanel">
+@section Scripts {
+    <!--
+        Ortak JS dosyaları
+        Sıra önemli değil ama okunabilirlik için mantıksal grupladık.
+    -->
+    <script src="~/js/LmsMp4.js"></script>
+    <script src="~/js/LmsPdf.js"></script>
+    <script src="~/js/LmsScorm.js"></script>
+    <script src="~/js/LmsXapi.js"></script>
+    <script src="~/js/LmsContentUpload.js"></script>
 
-    <h4>S3 Demo SCORM Eğitim</h4>
+    <script>
+        // Sayfanın HTML’i tamamen yüklendikten sonra çalıştıracağımız
+        // global başlangıç noktası
+        document.addEventListener("DOMContentLoaded", function () {
 
-    <!-- BAŞLAT -->
-    <button
-        class="btn btn-primary mb-3"
-        id="btn-start-scorm">
-        Eğitimi Başlat
-    </button>
+            // ==============================
+            // 1) MP4 TABI (Video eğitim)
+            // ==============================
+            // - Video player eventlerini dinleyen, her 5 sn'de bir
+            //   ve completed olduğunda cmi5/xAPI benzeri statement üreten JS.
+            // - /api/cmi5 endpoint'ine POST atıp log tablosunu yeniliyor.
+            if (window.LmsMp4) {
+                LmsMp4.init({
+                    apiBaseUrl: "/api/cmi5",
+                    contentType: "Mp4"
+                });
+            }
 
-    <small class="text-muted d-block mb-2">
-        SCORM içeriği S3 üzerinden iframe içinde açılır.
-    </small>
+            // ==============================
+            // 2) PDF TABI
+            // ==============================
+            // - PDF sayfa değişikliklerini dinleyip statement üreten JS.
+            // - Aynı cmi5 endpoint’ine gönderip logları güncelliyor.
+            if (window.LmsPdf) {
+                LmsPdf.init({
+                    apiBaseUrl: "/api/cmi5",
+                    contentType: "Pdf"
+                });
+            }
 
-    <!-- IFRAME -->
-    <div class="border rounded mb-4" style="height:520px">
-        <iframe
-            id="scorm-iframe"
-            style="width:100%; height:100%; border:0;"
-            allowfullscreen>
-        </iframe>
-    </div>
+            // ==============================
+            // 3) XAPI TABI
+            // ==============================
+            // - Kullanıcının formdan girdiği actor/verb/object/context değerleriyle
+            //   xAPI benzeri bir statement oluşturup backend’e gönderiyor.
+            if (window.LmsXapi) {
+                LmsXapi.init({
+                    apiBaseUrl: "/api/cmi5",
+                    contentType: "Xapi"
+                });
+            }
 
-    <hr />
+            // ======================================
+            // 4) SCORM TABI (LAZY INIT MANTIĞI)
+            // ======================================
+            // Burada kritik nokta şu:
+            //  - SCORM tabındaki HTML elementleri (btn-start-scorm, scorm-iframe vs.)
+            //    sayfa ilk açıldığında DOM’da olsa da bazı senaryolarda
+            //    tab yapısı yüzünden bulunamayabiliyor.
+            //  - Bu yüzden SCORM tarafını, tab GERÇEKTEN açıldığında init ediyoruz.
+            //
+            // Bootstrap 5 tab event’i: shown.bs.tab
+            //   -> SCORM tab butonunu yakalayıp, o event’te LmsScorm.init çağırıyoruz.
+            const scormTabLink = document.querySelector(
+                '[data-bs-toggle="tab"][data-bs-target="#scorm-tab"]'
+            );
 
-    <!-- SCORM AKSİYON -->
-    <h5>SCORM Aksiyon</h5>
+            if (window.LmsScorm && scormTabLink) {
+                console.log("Index: SCORM tab event'i bağlanıyor");
 
-    <div class="row mb-3">
-        <div class="col-md-4">
-            <label>Kullanıcı</label>
-            <input id="scorm-userId" class="form-control" value="demo-user" />
-        </div>
+                scormTabLink.addEventListener("shown.bs.tab", function () {
+                    console.log("Index: SCORM tab açıldı, LmsScorm.init çağrılıyor");
+                    // Şimdilik config yok; ileride apiBaseUrl vb. eklersen buraya geçebilirsin.
+                    LmsScorm.init();
+                });
+            }
 
-        <div class="col-md-4">
-            <label>ContentId</label>
-            <input id="scorm-contentId" class="form-control" value="scorm1" />
-        </div>
+            // ======================================
+            // 5) İÇERİK YÖNETİMİ (UPLOAD TABI)
+            // ======================================
+            // - Kullanıcının seçtiği eğitim türüne göre (Mp4, Pdf, Scorm, Xapi)
+            //   ilgili dosyayı S3’e upload eden JS.
+            // - Upload sonrası istersen içerik listesini yenilemek için 
+            //   LmsContentUpload.js içinde ayrı bir fonksiyon çağrılabilir.
+            if (window.LmsUpload) {
+                LmsUpload.init();
+            }
 
-        <div class="col-md-4">
-            <label>Context</label>
-            <input
-                id="scorm-context"
-                class="form-control"
-                placeholder="örn: bölüm, cihaz vb." />
-        </div>
-    </div>
-
-    <!-- JSON -->
-    <h6>JSON Preview (cmi5 / xAPI)</h6>
-    <pre id="scorm-json-preview" class="bg-light p-2">{}</pre>
-
-    <!-- LOG -->
-    <h6>Loglar</h6>
-    <div id="scorm-logs"></div>
-
-</div>
+        });
+    </script>
+}
