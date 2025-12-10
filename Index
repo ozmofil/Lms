@@ -1,19 +1,156 @@
 @section Scripts {
+    <!-- Diğer tabların scriptleri -->
     <script src="~/js/LmsMp4.js"></script>
     <script src="~/js/LmsPdf.js"></script>
     <script src="~/js/LmsScorm.js"></script>
     <script src="~/js/LmsXapi.js"></script>
-    <script src="~/js/LmsContentUpload.js"></script>
 
     <script>
+        // Sayfa DOM hazır olduğunda çalışacak ana init
         document.addEventListener("DOMContentLoaded", function () {
-            LmsMp4.init({ apiBaseUrl: "/api/cmi5", contentType: "Mp4" });
-            LmsPdf.init({ apiBaseUrl: "/api/cmi5", contentType: "Pdf" });
-            LmsScorm.init({ apiBaseUrl: "/api/cmi5", contentType: "Scorm" });
-            LmsXapi.init({ apiBaseUrl: "/api/cmi5", contentType: "Xapi" });
 
-            // İçerik Yönetimi tabı
-            LmsUpload.init();
+            // --- Mevcut MP4 / PDF / SCORM / xAPI init'leri ---
+            if (window.LmsMp4) {
+                LmsMp4.init({ apiBaseUrl: "/api/cmi5", contentType: "Mp4" });
+            }
+            if (window.LmsPdf) {
+                LmsPdf.init({ apiBaseUrl: "/api/cmi5", contentType: "Pdf" });
+            }
+            if (window.LmsScorm) {
+                LmsScorm.init({ apiBaseUrl: "/api/cmi5", contentType: "Scorm" });
+            }
+            if (window.LmsXapi) {
+                LmsXapi.init({ apiBaseUrl: "/api/cmi5", contentType: "Xapi" });
+            }
+
+            // =============== İÇERİK YÖNETİMİ (UPLOAD) JS ===============
+
+            console.log("Admin upload init başlıyor...");
+
+            const typeSelect    = document.getElementById("admin-contentType");
+            const fileInput     = document.getElementById("admin-file");
+            const uploadBtn     = document.getElementById("admin-upload-btn");
+            const statusLabel   = document.getElementById("admin-upload-status");
+            const listContainer = document.getElementById("admin-content-list");
+
+            // Güvenlik için element kontrolleri
+            if (!uploadBtn || !typeSelect || !fileInput || !statusLabel || !listContainer) {
+                console.warn("Admin upload elementlerinden biri bulunamadı.");
+                return;
+            }
+
+            console.log("Admin upload elementleri bulundu.");
+
+            // ---- S3 listesini çeken fonksiyon ----
+            async function loadList() {
+                const contentType = typeSelect.value;
+                console.log("Liste yükleniyor, tür:", contentType);
+
+                listContainer.innerHTML = "Yükleniyor...";
+
+                try {
+                    const response = await fetch(`/api/storage/list?contentType=${encodeURIComponent(contentType)}`);
+                    if (!response.ok) {
+                        throw new Error("Liste alınamadı: " + response.status);
+                    }
+
+                    const items = await response.json();
+                    console.log("Liste sonucu:", items);
+
+                    if (!items || items.length === 0) {
+                        listContainer.innerHTML = "<p>Bu türde henüz içerik yok.</p>";
+                        return;
+                    }
+
+                    let html = `<table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Key</th>
+                                <th>Önizleme / Link</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+                    items.forEach(item => {
+                        html += `<tr>
+                            <td class="small">${item.key}</td>
+                            <td><a href="${item.url}" target="_blank">Aç</a></td>
+                        </tr>`;
+                    });
+
+                    html += "</tbody></table>";
+                    listContainer.innerHTML = html;
+
+                } catch (err) {
+                    console.error(err);
+                    listContainer.innerHTML = `<p class="text-danger">Hata: ${err.message}</p>`;
+                }
+            }
+
+            // ---- Dosya upload eden fonksiyon ----
+            async function uploadFile() {
+                const contentType = typeSelect.value;
+                const files = fileInput.files;
+
+                console.log("Upload tetiklendi.");
+
+                if (!files || files.length === 0) {
+                    statusLabel.textContent = "Lütfen bir dosya seçin.";
+                    return;
+                }
+
+                const file = files[0];
+
+                const formData = new FormData();
+                formData.append("file", file);
+                formData.append("contentType", contentType);
+
+                statusLabel.textContent = "Yükleniyor...";
+
+                try {
+                    console.log("Upload isteği gönderiliyor:", contentType, file.name);
+
+                    const response = await fetch("/api/storage/upload", {
+                        method: "POST",
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        throw new Error("Sunucu hatası: " + response.status);
+                    }
+
+                    const data = await response.json();
+                    console.log("Upload tamamlandı:", data);
+
+                    statusLabel.textContent = "Yükleme tamamlandı.";
+
+                    // Yükleme sonrası listeyi yenile
+                    await loadList();
+
+                } catch (err) {
+                    console.error(err);
+                    statusLabel.textContent = "Hata: " + err.message;
+                }
+            }
+
+            // ---- Event bağlama ----
+
+            // Yükle butonu tıklanınca upload yap
+            uploadBtn.addEventListener("click", function (e) {
+                e.preventDefault();
+                console.log("Yükle butonuna tıklandı.");
+                uploadFile();
+            });
+
+            // Eğitim türü değişince listeyi yenile
+            typeSelect.addEventListener("change", function () {
+                loadList();
+            });
+
+            // Sayfa ilk açıldığında varsayılan tür için listeyi getir
+            loadList();
+
+            console.log("Admin upload init bitti.");
         });
     </script>
 }
