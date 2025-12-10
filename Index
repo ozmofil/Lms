@@ -1,49 +1,100 @@
-@section Scripts {
-    <!-- Tab scriptleri -->
-    <script src="~/js/LmsMp4.js"></script>
-    <script src="~/js/LmsPdf.js"></script>
-    <script src="~/js/LmsScorm.js"></script>
-    <script src="~/js/LmsXapi.js"></script>
-    <script src="~/js/LmsContentUpload.js"></script>
-
-    <script>
-        document.addEventListener("DOMContentLoaded", function () {
-
-            // MP4 tabı
-            if (window.LmsMp4) {
-                LmsMp4.init({
-                    apiBaseUrl: "/api/cmi5",
-                    contentType: "Mp4"
-                });
-            }
-
-            // PDF tabı
-            if (window.LmsPdf) {
-                LmsPdf.init({
-                    apiBaseUrl: "/api/cmi5",
-                    contentType: "Pdf"
-                });
-            }
-
-            // SCORM tabı
-            if (window.LmsScorm) {
-                // LmsScorm.js içinde hem window.API’yi expose ediyor
-                // hem de SCORM launch + log mekanizmasını kuruyor
-                LmsScorm.init();
-            }
-
-            // xAPI tabı
-            if (window.LmsXapi) {
-                LmsXapi.init({
-                    apiBaseUrl: "/api/cmi5",
-                    contentType: "Xapi"
-                });
-            }
-
-            // İçerik Yönetimi (S3 upload) tabı
-            if (window.LmsUpload) {
-                LmsUpload.init();
-            }
-        });
-    </script>
+@{
+    // Model doluysa onu kullan, yoksa örnek değerler verelim
+    var scormCourseId = Model?.ScormContent?.Id ?? "course-123";
+    var scormTitle    = Model?.ScormContent?.Title ?? "Örnek SCORM İçerik";
 }
+
+<!-- ===========================
+     SCORM TAB PANEL
+=========================== -->
+<div class="tab-pane fade"
+     id="scorm-panel"
+     role="tabpanel"
+     aria-labelledby="scorm-tab">
+
+    <h3 class="mt-3">@scormTitle</h3>
+
+    <!-- === SCORM BAŞLAT === -->
+    <div class="mb-3 d-flex gap-2 align-items-center">
+        <button id="load-scorm-btn"
+                class="btn btn-sm btn-primary"
+                data-course-id="@scormCourseId">
+            Eğitimi Başlat
+        </button>
+
+        <small class="text-muted">
+            SCORM eğitim içeriği S3 üzerinde saklanmaktadır.
+        </small>
+    </div>
+
+    <!-- === SCORM IFRAME === -->
+    <div class="border rounded mb-4" style="height:520px;">
+        <iframe id="scorm-frame"
+                style="width:100%; height:100%; border:none;"
+                allowfullscreen>
+        </iframe>
+    </div>
+
+    <hr />
+
+    <!-- ===========================
+         SCORM AKSİYON FORMU
+    =========================== -->
+    <h5>SCORM Aksiyon</h5>
+
+    <div class="row mb-3">
+        <div class="col-md-3">
+            <label class="form-label">Kullanıcı</label>
+            <input id="scorm-userId"
+                   class="form-control"
+                   value="demo-user" />
+        </div>
+
+        <div class="col-md-3">
+            <label class="form-label">ContentId</label>
+            <input id="scorm-contentId"
+                   class="form-control"
+                   value="@scormCourseId"
+                   readonly />
+        </div>
+
+        <div class="col-md-6">
+            <label class="form-label">Context</label>
+            <textarea id="scorm-context"
+                      class="form-control"
+                      rows="1"
+                      placeholder="Örn: bölüm adı, cihaz bilgisi vb."></textarea>
+        </div>
+    </div>
+
+    <!-- ===========================
+         JSON PREVIEW
+    =========================== -->
+    <div class="mb-3">
+        <label class="form-label fw-bold">JSON Preview (cmi5 / xAPI Statement)</label>
+        <pre id="scorm-json-preview"
+             class="bg-light p-3 border rounded"
+             style="min-height:120px; max-height:260px; overflow:auto;">
+{}
+        </pre>
+    </div>
+
+    <!-- ===========================
+         LOG TABLOSU
+    =========================== -->
+    <h6>Loglar</h6>
+    <div class="table-responsive">
+        <table class="table table-sm table-bordered">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:120px;">Zaman</th>
+                    <th>Statement JSON</th>
+                </tr>
+            </thead>
+            <tbody id="scorm-log-body">
+                <!-- LmsScorm.js içinden prepend ile dolduruluyor -->
+            </tbody>
+        </table>
+    </div>
+
+</div>
