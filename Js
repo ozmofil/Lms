@@ -1,181 +1,68 @@
-/*
- * LmsScorm.js
- * ---------------------------------------
- * SCORM 1.2 launch + API mock + event capture
- * ---------------------------------------
- */
+// wwwroot/js/LmsScorm.js
+// SCORM tabındaki "Eğitimi Başlat" butonunu dinler,
+// backend'den launchUrl alır, iframe'e yazar.
+// Şimdilik odak: buton çalışsın ve iframe'e URL gelsin.
 
 var LmsScorm = (function () {
 
-    let currentCourseId = null;
-    let iframeEl = null;
-
-    /* =========================
-       INIT
-    ========================= */
     function init() {
-        iframeEl = document.getElementById("scorm-frame");
+        console.log("LmsScorm.init çağrıldı");
 
-        const loadBtn = document.getElementById("load-scorm-btn");
-        if (!iframeEl || !loadBtn) {
-            console.warn("SCORM UI elementleri bulunamadı");
+        const btn = document.getElementById("load-scorm-btn");
+        const frame = document.getElementById("scorm-frame");
+
+        if (!btn || !frame) {
+            console.warn("LmsScorm: load-scorm-btn veya scorm-frame bulunamadı");
             return;
         }
 
-        loadBtn.addEventListener("click", () => {
-            currentCourseId = loadBtn.dataset.courseId || "course-123";
-            launchScorm(currentCourseId);
+        // Buton click event'i
+        btn.addEventListener("click", async function () {
+            console.log("LmsScorm: 'Eğitimi Başlat' tıklandı");
+
+            const courseId = btn.dataset.courseId || "scorm1";
+
+            try {
+                const url = `/api/storage/scorm/launch?courseId=${encodeURIComponent(courseId)}`;
+                console.log("LmsScorm: launch isteği:", url);
+
+                const res = await fetch(url);
+                console.log("LmsScorm: response status", res.status);
+
+                if (!res.ok) {
+                    throw new Error("Launch isteği başarısız: " + res.status);
+                }
+
+                const data = await res.json();
+                console.log("LmsScorm: gelen data", data);
+
+                if (!data.launchUrl) {
+                    throw new Error("launchUrl dönmedi");
+                }
+
+                // SCORM içeriğini iframe içinde aç
+                frame.src = data.launchUrl;
+                console.log("LmsScorm: iframe.src =", data.launchUrl);
+
+            } catch (err) {
+                console.error("LmsScorm: hata", err);
+
+                // Hata durumunda iframe'e basit bir mesaj yazdır
+                const doc = frame.contentDocument || frame.contentWindow?.document;
+                if (doc) {
+                    doc.open();
+                    doc.write(`<html><body style="font-family: sans-serif; padding:16px;">
+                        <h3>SCORM başlatılırken hata oluştu</h3>
+                        <pre>${err.message}</pre>
+                    </body></html>`);
+                    doc.close();
+                }
+            }
         });
-
-        exposeScormApi();
     }
 
-    /* =========================
-       SCORM LAUNCH
-    ========================= */
-    async function launchScorm(courseId) {
-        try {
-            console.log("SCORM launch:", courseId);
+    return {
+        init: init
+    };
 
-            const res = await fetch(`/api/storage/scorm/launch?courseId=${courseId}`);
-            if (!res.ok) throw new Error("SCORM launch URL alınamadı");
-
-            const data = await res.json();
-            iframeEl.src = data.launchUrl;
-
-        } catch (err) {
-            console.error("SCORM başlatma hatası:", err);
-        }
-    }
-
-    /* =========================
-       SCORM API (SCORM 1.2)
-    ========================= */
-    function exposeScormApi() {
-
-        window.API = {
-            LMSInitialize,
-            LMSFinish,
-            LMSSetValue,
-            LMSGetValue,
-            LMSCommit,
-            LMSGetLastError,
-            LMSGetErrorString,
-            LMSGetDiagnostic
-        };
-
-        console.log("SCORM API hazır");
-    }
-
-    /* =========================
-       SCORM API FUNCTIONS
-    ========================= */
-
-    function LMSInitialize() {
-        logEvent("initialized");
-        return "true";
-    }
-
-    function LMSFinish() {
-        logEvent("terminated", {
-            completion: true
-        });
-        return "true";
-    }
-
-    function LMSSetValue(key, value) {
-        console.log("SCORM:SetValue", key, value);
-
-        const result = mapCmiToResult(key, value);
-        if (result) {
-            logEvent("progressed", result);
-        }
-
-        return "true";
-    }
-
-    function LMSGetValue(key) {
-        return "";
-    }
-
-    function LMSCommit() {
-        logEvent("committed");
-        return "true";
-    }
-
-    function LMSGetLastError() { return "0"; }
-    function LMSGetErrorString() { return ""; }
-    function LMSGetDiagnostic() { return ""; }
-
-    /* =========================
-       CMI → RESULT MAPPER
-    ========================= */
-    function mapCmiToResult(key, value) {
-        const result = {};
-
-        switch (key) {
-
-            case "cmi.core.lesson_status":
-                result.completion = (value === "completed" || value === "passed");
-                break;
-
-            case "cmi.core.score.raw":
-                result.score = Number(value);
-                break;
-
-            case "cmi.core.session_time":
-                result.duration = value;
-                break;
-
-            default:
-                return null;
-        }
-
-        return result;
-    }
-
-    /* =========================
-       LOGGING / JSON
-    ========================= */
-    function logEvent(verb, result = {}) {
-        const statement = buildStatement(verb, result);
-
-        console.log("SCORM Statement:", statement);
-
-        // JSON Preview alanı
-        const preview = document.getElementById("scorm-json-preview");
-        if (preview) {
-            preview.textContent = JSON.stringify(statement, null, 2);
-        }
-
-        // Log listesi (opsiyonel)
-        appendLog(statement);
-    }
-
-    function buildStatement(verb, result) {
-        return {
-            Actor: document.getElementById("scorm-userId")?.value || "demo-user",
-            Verb: verb,
-            Object: currentCourseId,
-            Context: document.getElementById("scorm-context")?.value || "",
-            Result: Object.keys(result).length ? result : null,
-            ContentType: "scorm",
-            Timestamp: new Date().toISOString()
-        };
-    }
-
-    function appendLog(statement) {
-        const logBody = document.getElementById("scorm-log-body");
-        if (!logBody) return;
-
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-            <td>${new Date(statement.Timestamp).toLocaleTimeString()}</td>
-            <td><pre>${JSON.stringify(statement)}</pre></td>
-        `;
-        logBody.prepend(tr);
-    }
-
-    /* ========================= */
-    return { init };
 })();
