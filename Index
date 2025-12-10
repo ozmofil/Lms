@@ -1,18 +1,44 @@
-<ul class="nav nav-tabs mb-3" id="contentTabs" role="tablist">
-    <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="mp4-tab-link" data-bs-toggle="tab" data-bs-target="#mp4-tab" type="button" role="tab">MP4</button>
-    </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="pdf-tab-link" data-bs-toggle="tab" data-bs-target="#pdf-tab" type="button" role="tab">PDF</button>
-    </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="scorm-tab-link" data-bs-toggle="tab" data-bs-target="#scorm-tab" type="button" role="tab">SCORM</button>
-    </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="xapi-tab-link" data-bs-toggle="tab" data-bs-target="#xapi-tab" type="button" role="tab">xAPI</button>
-    </li>
-    <!-- Yeni tab -->
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="admin-tab-link" data-bs-toggle="tab" data-bs-target="#admin-tab" type="button" role="tab">İçerik Yönetimi</button>
-    </li>
-</ul>
+<div class="tab-content" id="contentTabsContent">
+    <!-- ... mevcut MP4, PDF, SCORM, xAPI tabları ... -->
+
+    <!-- ========== İÇERİK YÖNETİMİ TABI ========== -->
+    <div class="tab-pane fade" id="admin-tab" role="tabpanel" aria-labelledby="admin-tab-link">
+
+        <h5>İçerik Yükleme</h5>
+
+        <form id="admin-upload-form" class="mb-3">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Eğitim Türü</label>
+                    <select id="admin-contentType" class="form-select">
+                        <option value="Mp4">MP4</option>
+                        <option value="Pdf">PDF</option>
+                        <option value="Scorm">SCORM</option>
+                        <option value="Xapi">xAPI</option>
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Dosya</label>
+                    <input type="file" id="admin-file" class="form-control" />
+                </div>
+                <div class="col-md-2">
+                    <button type="button" id="admin-upload-btn" class="btn btn-primary w-100">
+                        Yükle
+                    </button>
+                </div>
+                <div class="col-md-2">
+                    <small id="admin-upload-status" class="text-muted"></small>
+                </div>
+            </div>
+        </form>
+
+        <hr />
+
+        <h5>Mevcut Eğitimler</h5>
+        <p class="text-muted small">
+            Seçili eğitim türüne göre S3 üzerindeki içerikler listelenir.
+        </p>
+
+        <div id="admin-content-list"></div>
+    </div>
+</div>
