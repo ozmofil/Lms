@@ -6,12 +6,19 @@
 
 (function () {
 
+    console.log("LmsContentUpload.js yüklendi.");
+
+    // ----------------- Yardımcı fonksiyonlar -----------------
+
     async function uploadFile() {
         const typeSelect = document.getElementById("admin-contentType");
         const fileInput  = document.getElementById("admin-file");
         const status     = document.getElementById("admin-upload-status");
 
-        if (!typeSelect || !fileInput) return;
+        if (!typeSelect || !fileInput || !status) {
+            console.warn("admin upload elementleri bulunamadı.");
+            return;
+        }
 
         const contentType = typeSelect.value;
 
@@ -29,6 +36,8 @@
         status.textContent = "Yükleniyor...";
 
         try {
+            console.log("Upload isteği gönderiliyor...", contentType, file.name);
+
             const response = await fetch("/api/storage/upload", {
                 method: "POST",
                 body: formData
@@ -39,6 +48,8 @@
             }
 
             const data = await response.json();
+            console.log("Upload tamamlandı:", data);
+
             status.textContent = "Yükleme tamamlandı.";
 
             // Yükleme sonrası seçili türün listesini yenile
@@ -52,17 +63,23 @@
 
     async function loadList(contentType) {
         const listContainer = document.getElementById("admin-content-list");
-        if (!listContainer) return;
+        if (!listContainer) {
+            console.warn("admin-content-list elementi bulunamadı.");
+            return;
+        }
 
         listContainer.innerHTML = "Yükleniyor...";
 
         try {
+            console.log("Liste isteği:", contentType);
+
             const response = await fetch(`/api/storage/list?contentType=${encodeURIComponent(contentType)}`);
             if (!response.ok) {
                 throw new Error("Liste alınamadı: " + response.status);
             }
 
             const items = await response.json();
+            console.log("Liste sonucu:", items);
 
             if (!items || items.length === 0) {
                 listContainer.innerHTML = "<p>Bu türde henüz içerik yok.</p>";
@@ -96,8 +113,12 @@
         }
     }
 
+    // ----------------- Public API -----------------
+
     window.LmsUpload = {
         init: function () {
+            console.log("LmsUpload.init çalıştı.");
+
             const typeSelect = document.getElementById("admin-contentType");
             const uploadBtn  = document.getElementById("admin-upload-btn");
 
@@ -106,6 +127,8 @@
                     e.preventDefault();
                     uploadFile();
                 });
+            } else {
+                console.warn("admin-upload-btn bulunamadı.");
             }
 
             // Eğitim türü değiştikçe listeyi yenile
@@ -116,6 +139,8 @@
 
                 // Sayfa ilk açıldığında varsayılan tür için listeyi yükle
                 loadList(typeSelect.value);
+            } else {
+                console.warn("admin-contentType bulunamadı.");
             }
         }
     };
