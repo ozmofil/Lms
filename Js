@@ -3,146 +3,143 @@
 // - Eğitim türüne göre dosya upload eder (/api/storage/upload)
 // - S3'ten içerik listesini çeker (/api/storage/list)
 // - Listeyi tabloda gösterir
+// Bu dosya sadece admin/upload işinden sorumlu.
 
 (function () {
 
-    console.log("LmsContentUpload.js yüklendi.");
+    // Dışarıdan erişilecek tek nokta: LmsUpload.init()
+    function init() {
+        console.log("LmsUpload.init başladı.");
 
-    // ----------------- Yardımcı fonksiyonlar -----------------
-
-    async function uploadFile() {
-        const typeSelect = document.getElementById("admin-contentType");
-        const fileInput  = document.getElementById("admin-file");
-        const status     = document.getElementById("admin-upload-status");
-
-        if (!typeSelect || !fileInput || !status) {
-            console.warn("admin upload elementleri bulunamadı.");
-            return;
-        }
-
-        const contentType = typeSelect.value;
-
-        if (!fileInput.files || fileInput.files.length === 0) {
-            status.textContent = "Lütfen bir dosya seçin.";
-            return;
-        }
-
-        const file = fileInput.files[0];
-
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("contentType", contentType);
-
-        status.textContent = "Yükleniyor...";
-
-        try {
-            console.log("Upload isteği gönderiliyor...", contentType, file.name);
-
-            const response = await fetch("/api/storage/upload", {
-                method: "POST",
-                body: formData
-            });
-
-            if (!response.ok) {
-                throw new Error("Sunucu hatası: " + response.status);
-            }
-
-            const data = await response.json();
-            console.log("Upload tamamlandı:", data);
-
-            status.textContent = "Yükleme tamamlandı.";
-
-            // Yükleme sonrası seçili türün listesini yenile
-            await loadList(contentType);
-
-        } catch (err) {
-            console.error(err);
-            status.textContent = "Hata: " + err.message;
-        }
-    }
-
-    async function loadList(contentType) {
+        const typeSelect    = document.getElementById("admin-contentType");
+        const fileInput     = document.getElementById("admin-file");
+        const uploadBtn     = document.getElementById("admin-upload-btn");
+        const statusLabel   = document.getElementById("admin-upload-status");
         const listContainer = document.getElementById("admin-content-list");
-        if (!listContainer) {
-            console.warn("admin-content-list elementi bulunamadı.");
+
+        // Güvenlik için element kontrolleri
+        if (!uploadBtn || !typeSelect || !fileInput || !statusLabel || !listContainer) {
+            console.warn("LmsUpload: admin upload elementlerinden biri bulunamadı.");
             return;
         }
 
-        listContainer.innerHTML = "Yükleniyor...";
+        console.log("LmsUpload: admin upload elementleri bulundu.");
 
-        try {
-            console.log("Liste isteği:", contentType);
+        // ---- S3 listesini çeken fonksiyon ----
+        async function loadList() {
+            const contentType = typeSelect.value;
+            console.log("LmsUpload: liste yükleniyor, tür:", contentType);
 
-            const response = await fetch(`/api/storage/list?contentType=${encodeURIComponent(contentType)}`);
-            if (!response.ok) {
-                throw new Error("Liste alınamadı: " + response.status);
+            listContainer.innerHTML = "Yükleniyor...";
+
+            try {
+                const response = await fetch(`/api/storage/list?contentType=${encodeURIComponent(contentType)}`);
+                if (!response.ok) {
+                    throw new Error("Liste alınamadı: " + response.status);
+                }
+
+                const items = await response.json();
+                console.log("LmsUpload: liste sonucu:", items);
+
+                if (!items || items.length === 0) {
+                    listContainer.innerHTML = "<p>Bu türde henüz içerik yok.</p>";
+                    return;
+                }
+
+                let html = `<table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Key</th>
+                            <th>Önizleme / Link</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+                items.forEach(item => {
+                    html += `<tr>
+                        <td class="small">${item.key}</td>
+                        <td><a href="${item.url}" target="_blank">Aç</a></td>
+                    </tr>`;
+                });
+
+                html += "</tbody></table>";
+                listContainer.innerHTML = html;
+
+            } catch (err) {
+                console.error("LmsUpload: liste hatası", err);
+                listContainer.innerHTML = `<p class="text-danger">Hata: ${err.message}</p>`;
             }
+        }
 
-            const items = await response.json();
-            console.log("Liste sonucu:", items);
+        // ---- Dosya upload eden fonksiyon ----
+        async function uploadFile() {
+            const contentType = typeSelect.value;
+            const files = fileInput.files;
 
-            if (!items || items.length === 0) {
-                listContainer.innerHTML = "<p>Bu türde henüz içerik yok.</p>";
+            console.log("LmsUpload: upload tetiklendi.");
+
+            if (!files || files.length === 0) {
+                statusLabel.textContent = "Lütfen bir dosya seçin.";
                 return;
             }
 
-            let html = `<table class="table table-sm">
-                <thead>
-                    <tr>
-                        <th>Key</th>
-                        <th>Önizleme / Link</th>
-                    </tr>
-                </thead>
-                <tbody>`;
+            const file = files[0];
 
-            items.forEach(item => {
-                html += `<tr>
-                    <td class="small">${item.key}</td>
-                    <td>
-                        <a href="${item.url}" target="_blank">Aç</a>
-                    </td>
-                </tr>`;
-            });
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("contentType", contentType);
 
-            html += "</tbody></table>";
-            listContainer.innerHTML = html;
+            statusLabel.textContent = "Yükleniyor...";
 
-        } catch (err) {
-            console.error(err);
-            listContainer.innerHTML = `<p class="text-danger">Hata: ${err.message}</p>`;
+            try {
+                console.log("LmsUpload: upload isteği gönderiliyor:", contentType, file.name);
+
+                const response = await fetch("/api/storage/upload", {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error("Sunucu hatası: " + response.status);
+                }
+
+                const data = await response.json();
+                console.log("LmsUpload: upload tamamlandı:", data);
+
+                statusLabel.textContent = "Yükleme tamamlandı.";
+
+                // Yükleme sonrası listeyi yenile
+                await loadList();
+
+            } catch (err) {
+                console.error("LmsUpload: upload hatası", err);
+                statusLabel.textContent = "Hata: " + err.message;
+            }
         }
+
+        // ---- Event bağlama ----
+
+        // Yükle butonu tıklanınca upload yap
+        uploadBtn.addEventListener("click", function (e) {
+            e.preventDefault();
+            console.log("LmsUpload: Yükle butonuna tıklandı.");
+            uploadFile();
+        });
+
+        // Eğitim türü değişince listeyi yenile
+        typeSelect.addEventListener("change", function () {
+            loadList();
+        });
+
+        // Sayfa ilk açıldığında varsayılan tür için listeyi getir
+        loadList();
+
+        console.log("LmsUpload.init bitti.");
     }
 
-    // ----------------- Public API -----------------
-
+    // Global obje: sadece init fonksiyonu dışarı açılıyor
     window.LmsUpload = {
-        init: function () {
-            console.log("LmsUpload.init çalıştı.");
-
-            const typeSelect = document.getElementById("admin-contentType");
-            const uploadBtn  = document.getElementById("admin-upload-btn");
-
-            if (uploadBtn) {
-                uploadBtn.addEventListener("click", function (e) {
-                    e.preventDefault();
-                    uploadFile();
-                });
-            } else {
-                console.warn("admin-upload-btn bulunamadı.");
-            }
-
-            // Eğitim türü değiştikçe listeyi yenile
-            if (typeSelect) {
-                typeSelect.addEventListener("change", function () {
-                    loadList(typeSelect.value);
-                });
-
-                // Sayfa ilk açıldığında varsayılan tür için listeyi yükle
-                loadList(typeSelect.value);
-            } else {
-                console.warn("admin-contentType bulunamadı.");
-            }
-        }
+        init: init
     };
 
 })();
