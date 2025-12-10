@@ -1,97 +1,49 @@
-<!-- ===========================
-     SCORM TAB
-=========================== -->
-<div class="tab-pane fade" id="scorm-tab" role="tabpanel" aria-labelledby="scorm-tab-link">
+@section Scripts {
+    <!-- Tab scriptleri -->
+    <script src="~/js/LmsMp4.js"></script>
+    <script src="~/js/LmsPdf.js"></script>
+    <script src="~/js/LmsScorm.js"></script>
+    <script src="~/js/LmsXapi.js"></script>
+    <script src="~/js/LmsContentUpload.js"></script>
 
-    <h5 class="mt-3">SCORM İçerik</h5>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
 
-    <!-- === SCORM BAŞLAT === -->
-    <div class="mb-3 d-flex gap-2 align-items-center">
-        <button
-            id="load-scorm-btn"
-            class="btn btn-sm btn-primary"
-            data-course-id="course-123">
-            Eğitimi Başlat
-        </button>
+            // MP4 tabı
+            if (window.LmsMp4) {
+                LmsMp4.init({
+                    apiBaseUrl: "/api/cmi5",
+                    contentType: "Mp4"
+                });
+            }
 
-        <small class="text-muted">
-            SCORM eğitim S3 üzerinden yüklenecektir
-        </small>
-    </div>
+            // PDF tabı
+            if (window.LmsPdf) {
+                LmsPdf.init({
+                    apiBaseUrl: "/api/cmi5",
+                    contentType: "Pdf"
+                });
+            }
 
-    <!-- === SCORM IFRAME === -->
-    <div class="border rounded mb-4" style="height:520px;">
-        <iframe
-            id="scorm-frame"
-            style="width:100%; height:100%; border:none;"
-            allowfullscreen>
-        </iframe>
-    </div>
+            // SCORM tabı
+            if (window.LmsScorm) {
+                // LmsScorm.js içinde hem window.API’yi expose ediyor
+                // hem de SCORM launch + log mekanizmasını kuruyor
+                LmsScorm.init();
+            }
 
-    <hr />
+            // xAPI tabı
+            if (window.LmsXapi) {
+                LmsXapi.init({
+                    apiBaseUrl: "/api/cmi5",
+                    contentType: "Xapi"
+                });
+            }
 
-    <!-- ===========================
-         SCORM AKSİYON
-    =========================== -->
-    <h5>SCORM Aksiyon</h5>
-
-    <div class="row mb-3">
-        <div class="col-md-3">
-            <label>Kullanıcı</label>
-            <input
-                id="scorm-userId"
-                class="form-control"
-                value="demo-user" />
-        </div>
-
-        <div class="col-md-3">
-            <label>ContentId</label>
-            <input
-                id="scorm-contentId"
-                class="form-control"
-                value="course-123"
-                readonly />
-        </div>
-
-        <div class="col-md-6">
-            <label>Context</label>
-            <textarea
-                id="scorm-context"
-                class="form-control"
-                rows="1"></textarea>
-        </div>
-    </div>
-
-    <!-- ===========================
-         JSON PREVIEW
-    =========================== -->
-    <div class="mb-3">
-        <label class="fw-bold">JSON Preview</label>
-        <pre
-            id="scorm-json-preview"
-            class="bg-light p-3 border rounded"
-            style="min-height:120px;">
-{}
-        </pre>
-    </div>
-
-    <!-- ===========================
-         LOG TABLOSU
-    =========================== -->
-    <h6>Loglar</h6>
-
-    <div class="table-responsive">
-        <table class="table table-sm table-bordered">
-            <thead class="table-light">
-                <tr>
-                    <th style="width:120px;">Zaman</th>
-                    <th>Statement JSON</th>
-                </tr>
-            </thead>
-            <tbody id="scorm-log-body">
-                <!-- JS ile doldurulur -->
-            </tbody>
-        </table>
-    </div>
-
-</div>
+            // İçerik Yönetimi (S3 upload) tabı
+            if (window.LmsUpload) {
+                LmsUpload.init();
+            }
+        });
+    </script>
+}
