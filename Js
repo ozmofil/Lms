@@ -1,75 +1,50 @@
-// wwwroot/js/LmsScorm.js
-// SCORM tabındaki "Eğitimi Başlat" butonuna tıklandığında
-// backend'den launchUrl alıp iframe'e basar.
+(function () {
 
-var LmsScorm = (function () {
+    function byId(id) {
+        return document.getElementById(id);
+    }
 
-    function init() {
-        console.log("LmsScorm.init çağrıldı");
+    function init(config) {
+        console.log("✅ LmsScorm.init çalıştı");
 
-        const btn   = document.getElementById("load-scorm-btn");
-        const frame = document.getElementById("scorm-frame");
+        const btn = byId("btn-start-scorm");
+        const iframe = byId("scorm-iframe");
 
-        // Element bulunamadıysa hata verip uygulamayı kırma
-        if (!btn) {
-            console.warn("LmsScorm: #load-scorm-btn bulunamadı. Id'yi kontrol et.");
-            return;
-        }
-        if (!frame) {
-            console.warn("LmsScorm: #scorm-frame bulunamadı. Id'yi kontrol et.");
+        if (!btn || !iframe) {
+            console.warn("⛔ SCORM DOM hazır değil, init iptal");
             return;
         }
 
-        // Aynı event'i birden fazla eklememek için önce temizleyelim
-        btn.onclick = null;
-
-        btn.addEventListener("click", function () {
-            console.log("LmsScorm: 'Eğitimi Başlat' tıklandı");
-            startScorm(btn, frame);
+        btn.addEventListener("click", () => {
+            // (Normalde backend’den pre-signed URL gelir)
+            iframe.src = "/scorm/index.html";
+            console.log("▶️ SCORM başlatıldı");
         });
+
+        ["scorm-userId", "scorm-contentId", "scorm-context"]
+            .forEach(id => {
+                const el = byId(id);
+                if (!el) return;
+                el.addEventListener("input", () => updatePreview());
+            });
+
+        updatePreview();
     }
 
-    async function startScorm(btn, frame) {
-        const courseId = btn.dataset.courseId || "scorm1";
+    function updatePreview() {
+        const json = {
+            actor: byId("scorm-userId")?.value,
+            verb: "launched",
+            object: byId("scorm-contentId")?.value,
+            context: byId("scorm-context")?.value,
+            contentType: "scorm",
+            timestamp: new Date().toISOString()
+        };
 
-        try {
-            const url = `/api/storage/scorm/launch?courseId=${encodeURIComponent(courseId)}`;
-            console.log("LmsScorm: launch isteği:", url);
-
-            const res = await fetch(url);
-            console.log("LmsScorm: response status", res.status);
-
-            if (!res.ok) {
-                throw new Error("Launch isteği başarısız: " + res.status);
-            }
-
-            const data = await res.json();
-            console.log("LmsScorm: gelen data", data);
-
-            if (!data.launchUrl) {
-                throw new Error("launchUrl dönmedi");
-            }
-
-            frame.src = data.launchUrl;
-            console.log("LmsScorm: iframe.src =", data.launchUrl);
-
-        } catch (err) {
-            console.error("LmsScorm: hata", err);
-
-            const doc = frame.contentDocument || frame.contentWindow?.document;
-            if (doc) {
-                doc.open();
-                doc.write(`<html><body style="font-family: sans-serif; padding:16px;">
-                    <h3>SCORM başlatılırken hata oluştu</h3>
-                    <pre>${err.message}</pre>
-                </body></html>`);
-                doc.close();
-            }
-        }
+        byId("scorm-json-preview").textContent =
+            JSON.stringify(json, null, 2);
     }
 
-    return {
-        init: init
-    };
+    window.LmsScorm = { init };
 
 })();
