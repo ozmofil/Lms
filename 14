@@ -1,0 +1,171 @@
+// wwwroot/js/LmsScorm.js
+// ============================================
+// SCORM sekmesi için frontend mantığı
+// - "Eğitimi Başlat" butonuna basıldığında
+//   S3'ten gelen SCORM launch URL iframe'e basılır
+// - İleride SCORM -> cmi5/xAPI mapping bu dosyada olacak
+// ============================================
+
+(function () {
+
+    // Küçük yardımcı: id ile element getir
+    function byId(id) {
+        return document.getElementById(id);
+    }
+
+    // Modül state'i
+    let _initialized = false;
+    let _config = {};
+
+    // JSON preview alanını güncelle
+    function updatePreview() {
+        const actor = byId("scorm-userId")?.value || "";
+        const contentId = byId("scorm-contentId")?.value || "";
+        const context = byId("scorm-context")?.value || "";
+
+        const statement = {
+            actor: actor,
+            verb: "initialized",      // şimdilik sabit, ileride dinamik
+            object: contentId,
+            context: context,
+            result: null,
+            contentType: "scorm",
+            timestamp: new Date().toISOString()
+        };
+
+        const preview = byId("scorm-json-preview");
+        if (preview) {
+            preview.textContent = JSON.stringify(statement, null, 2);
+        }
+    }
+
+    // Basit log yazıcı (ileride backend çağrısı ekleyebiliriz)
+    function appendLogRow(statementJson) {
+        const logsContainer = document.querySelector("#scorm-logs tbody");
+        if (!logsContainer) return;
+
+        const tr = document.createElement("tr");
+
+        const tdTime = document.createElement("td");
+        tdTime.textContent = new Date().toLocaleString();
+
+        const tdJson = document.createElement("td");
+        const pre = document.createElement("pre");
+        pre.className = "mb-0 small bg-light p-2";
+        pre.textContent = statementJson;
+        tdJson.appendChild(pre);
+
+        tr.appendChild(tdTime);
+        tr.appendChild(tdJson);
+
+        logsContainer.prepend(tr); // en üste ekle
+    }
+
+    // Backend'e SCORM statement POST etme (isteğe bağlı)
+    async function sendInitStatement(apiBaseUrl) {
+        const actor = byId("scorm-userId")?.value || "";
+        const contentId = byId("scorm-contentId")?.value || "";
+        const context = byId("scorm-context")?.value || "";
+
+        const statement = {
+            actor,
+            verb: "initialized",
+            object: contentId,
+            context,
+            result: null,
+            contentType: "scorm",
+            timestamp: new Date().toISOString()
+        };
+
+        try {
+            const response = await fetch(apiBaseUrl + "/statement", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(statement)
+            });
+
+            if (!response.ok) {
+                console.warn("SCORM statement gönderilemedi:", response.status);
+                return;
+            }
+
+            const data = await response.json();
+            appendLogRow(data.statementJson || JSON.stringify(statement));
+        } catch (err) {
+            console.error("SCORM statement gönderim hatası:", err);
+        }
+    }
+
+    // Dışarıdan çağrılan init fonksiyonu
+    function init(config) {
+        console.log("LmsScorm.init çağrıldı");
+        _config = config || {};
+        const apiBaseUrl = _config.apiBaseUrl || "/api/cmi5";
+
+        // DOM elemanlarını çek
+        const btn = byId("scorm-start-btn");
+        const iframe = byId("scorm-frame");
+
+        if (!btn || !iframe) {
+            console.warn("SCORM DOM hazır değil (btn veya iframe bulunamadı), init iptal.");
+            return;
+        }
+
+        if (_initialized) {
+            console.log("LmsScorm: zaten init edilmiş, tekrar bağlamıyoruz.");
+            return;
+        }
+
+        // "Eğitimi Başlat" butonuna click event’i bağla
+        btn.addEventListener("click", async () => {
+            console.log("SCORM: Eğitimi Başlat tıklandı");
+
+            try {
+                // 🔹 1) Backend'den S3'teki SCORM launch URL'i iste
+                // Örneğin: GET /api/storage/scorm/launch?contentId=scorm1
+                const contentId = byId("scorm-contentId")?.value || "scorm1";
+
+                const resp = await fetch(`/api/storage/scorm/launch?contentId=${encodeURIComponent(contentId)}`);
+                if (!resp.ok) {
+                    console.error("SCORM launch URL alınamadı:", resp.status);
+                    return;
+                }
+
+                const data = await resp.json();
+                const launchUrl = data.launchUrl;  // { "launchUrl": "https://s3.../index.html?token=..." }
+
+                // 🔹 2) Iframe'e URL'i bas
+                iframe.src = launchUrl || "/scorm/index.html"; // fallback: lokal demo
+
+                console.log("SCORM iframe src set:", iframe.src);
+
+                // 🔹 3) Initialized statement’i gönder & logla
+                updatePreview();
+                await sendInitStatement(apiBaseUrl);
+
+            } catch (err) {
+                console.error("SCORM başlatılırken hata:", err);
+            }
+        });
+
+        // Input değiştikçe JSON preview güncellensin
+        ["scorm-userId", "scorm-contentId", "scorm-context"].forEach(id => {
+            const el = byId(id);
+            if (!el) return;
+
+            el.addEventListener("input", updatePreview);
+            el.addEventListener("change", updatePreview);
+        });
+
+        // Sayfa ilk açıldığında boş bir preview göster
+        updatePreview();
+
+        _initialized = true;
+    }
+
+    // Global objeyi publish et
+    window.LmsScorm = {
+        init
+    };
+
+})();
