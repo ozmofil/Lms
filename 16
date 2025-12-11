@@ -1,0 +1,67 @@
+@section Scripts {
+    <script src="~/js/LmsMp4.js"></script>
+    <script src="~/js/LmsPdf.js"></script>
+    <script src="~/js/LmsScorm.js"></script>
+    <script src="~/js/LmsXapi.js"></script>
+    <script src="~/js/LmsContentUpload.js"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            console.log("Index: DOMContentLoaded");
+
+            // ===============================
+            // 1) MP4 / PDF / xAPI – direkt init
+            // ===============================
+            if (window.LmsMp4) {
+                LmsMp4.init({
+                    apiBaseUrl: "/api/cmi5",
+                    contentType: "mp4"
+                });
+            }
+
+            if (window.LmsPdf) {
+                LmsPdf.init({
+                    apiBaseUrl: "/api/cmi5",
+                    contentType: "pdf"
+                });
+            }
+
+            if (window.LmsXapi) {
+                LmsXapi.init({
+                    apiBaseUrl: "/api/cmi5",
+                    contentType: "xapi"
+                });
+            }
+
+            // =========================================
+            // 2) SCORM → SADECE SCORM TABI AÇILINCA init
+            // =========================================
+            // Nav’daki SCORM tab butonunu bul
+            const scormTabButton = document.querySelector(
+                'button[data-bs-toggle="tab"][data-bs-target="#scorm-panel"]'
+            );
+
+            if (scormTabButton && window.LmsScorm) {
+                console.log("Index: SCORM tab butonu bulundu");
+
+                // Bootstrap 5 tab event’i: tab görünür olduğunda tetiklenir
+                scormTabButton.addEventListener("shown.bs.tab", function () {
+                    console.log("Index: SCORM tab açıldı → LmsScorm.init çağrılıyor");
+
+                    // Şimdilik local SCORM içeriği.
+                    // İleride buraya backend’den gelen S3 pre-signed URL’i geçebiliriz.
+                    window.LmsScorm.init({
+                        launchUrl: "/scorm/index.html"
+                    });
+                });
+            }
+
+            // =========================================
+            // 3) İÇERİK YÖNETİMİ (UPLOAD TABI)
+            // =========================================
+            if (window.LmsUpload) {
+                LmsUpload.init();
+            }
+        });
+    </script>
+}
