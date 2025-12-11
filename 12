@@ -1,0 +1,50 @@
+@section Scripts {
+
+    <!-- Modüller -->
+    <script src="~/js/LmsMp4.js"></script>
+    <script src="~/js/LmsPdf.js"></script>
+    <script src="~/js/LmsScorm.js"></script>
+    <script src="~/js/LmsXapi.js"></script>
+    <script src="~/js/LmsContentUpload.js"></script>
+
+    <!-- PAGE BOOTSTRAP -->
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+
+            console.log("Index: DOMContentLoaded");
+
+            /* ---------------------------------
+             1) MP4 / PDF / XAPI → direkt init
+            ----------------------------------*/
+            window.LmsMp4?.init({ apiBaseUrl: "/api/cmi5", contentType: "mp4" });
+            window.LmsPdf?.init({ apiBaseUrl: "/api/cmi5", contentType: "pdf" });
+            window.LmsXapi?.init({ apiBaseUrl: "/api/cmi5", contentType: "xapi" });
+
+            /* ---------------------------------
+             2) SCORM → SADECE TAB AÇILINCA
+            ----------------------------------*/
+            const scormTabButton = document.querySelector(
+                '[data-bs-toggle="tab"][data-bs-target="#scorm-tab"]'
+            );
+
+            if (scormTabButton) {
+                console.log("Index: SCORM tab bulundu");
+
+                scormTabButton.addEventListener("shown.bs.tab", () => {
+                    console.log("Index: SCORM tab açıldı");
+
+                    if (window.LmsScorm?.init) {
+                        window.LmsScorm.init({
+                            apiBaseUrl: "/api/cmi5"
+                        });
+                    }
+                });
+            }
+
+            /* ---------------------------------
+             3) İçerik Yönetimi (Upload)
+            ----------------------------------*/
+            window.LmsUpload?.init();
+        });
+    </script>
+}
