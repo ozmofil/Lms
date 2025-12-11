@@ -1,0 +1,59 @@
+// wwwroot/js/LmsScorm.js
+
+(function () {
+    // Yardımcı: elemanı id'den bul
+    function byId(id) {
+        return document.getElementById(id);
+    }
+
+    /**
+     * SCORM tabı için init fonksiyonu.
+     * - "Eğitimi Başlat" butonuna click handler ekler.
+     * - SCORM iframe'ine launch URL'ini yazar.
+     * - İleride buraya SCORM → cmi5 statement üretimini ekleyeceğiz.
+     */
+    function init(config) {
+        console.log("LmsScorm.init çalıştı", config);
+
+        // Sayfadaki buton ve iframe'i bul
+        const btn = byId("scorm-start-btn");
+        const iframe = byId("scorm-frame");
+
+        console.log("LmsScorm.init DOM check", {
+            btnExists: !!btn,
+            iframeExists: !!iframe
+        });
+
+        // Güvenlik için basit kontrol: id’ler yanlışsa erken çık
+        if (!btn || !iframe) {
+            console.warn("SCORM DOM elemanları bulunamadı. Id'leri kontrol et: scorm-start-btn, scorm-frame");
+            return;
+        }
+
+        // Eski event handler kalmasın diye önce temizleyelim
+        btn.replaceWith(btn.cloneNode(true));
+        const freshBtn = byId("scorm-start-btn");
+
+        // Launch URL: şimdilik config.launchUrl varsa onu, yoksa local SCORM index’i kullanıyoruz
+        const launchUrl =
+            (config && config.launchUrl) ||
+            "/scorm/index.html";   // TODO: S3 pre-signed URL buraya bağlanacak
+
+        // Tek click handler
+        freshBtn.addEventListener("click", function (e) {
+            e.preventDefault();
+            console.log("SCORM başlat butonuna tıklandı. URL:", launchUrl);
+
+            // SCORM içeriğini iframe içinde aç
+            iframe.src = launchUrl;
+        });
+
+        console.log("LmsScorm.init bitti");
+    }
+
+    // Global objemiz
+    window.LmsScorm = {
+        init: init
+    };
+
+})();
